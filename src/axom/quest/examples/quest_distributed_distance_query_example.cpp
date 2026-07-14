@@ -1195,6 +1195,7 @@ public:
     const int domainCount = dstDomains->getNumGroups();
     const int srcDomainCount = static_cast<int>(conduit::blueprint::mesh::number_of_domains(node));
     SLIC_ASSERT(domainCount == srcDomainCount);
+    AXOM_UNUSED_VAR(srcDomainCount);
     for(int d = 0; d < domainCount; ++d)
     {
       sidre::Group& domGroup = *dstDomains->getGroup(d);
