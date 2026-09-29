@@ -237,7 +237,7 @@ if(NANOBIND_FOUND)
     #--------------------------------------------------------------------------
     # Copy Blueprint mesh generators to the build and install bin directories.
     #--------------------------------------------------------------------------
-    foreach(_mesh_gen_script gen-multidom-structured-mesh.py)
+    foreach(_mesh_gen_script gen-cartesian-blueprint-mesh.py)
         axom_configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/${_mesh_gen_script}"
                              "${PROJECT_BINARY_DIR}/bin/${_mesh_gen_script}" COPYONLY)
         axom_configure_file ("${CMAKE_CURRENT_SOURCE_DIR}/${_mesh_gen_script}"

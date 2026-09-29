@@ -6,45 +6,73 @@
 #
 # SPDX-License-Identifier: (BSD-3-Clause)
 
-# Write a multidomain Blueprint mesh for testing.
+# Generate a 2D or 3D Cartesian Blueprint mesh for testing.
+#
+# The in-memory Blueprint node always contains one or more domain children.
+# Conduit Relay writes the sole domain directly at the root 
+# when the product of --domains is one. Larger products remain multidomain.
+# The blueprint hierarchy passed to Relay is:
+#
+#   <bp_root>
+#    ├── <domain_i_j[_k]>              Map entry, or list child with --useList
+#    │    ├── coordsets
+#    │    │   └── coords
+#    │    │        ├─• type            == "explicit"
+#    │    │        └── values          i-fastest node order; padded with --strided
+#    │    │             ├─• x
+#    │    │             ├─• y
+#    │    │             └─• [z]        Present in 3D
+#    │    ├── topologies
+#    │    │   └── mesh
+#    │    │        ├─• type            == "structured" or "unstructured"
+#    │    │        ├─• coordset        == "coords"
+#    │    │        └── elements
+#    │    │             ├── [dims]     Present with structured topology
+#    │    │             │    ├─• i
+#    │    │             │    ├─• j
+#    │    │             │    ├─• [k]          Present in 3D
+#    │    │             │    ├─• [offsets]    Present with --strided
+#    │    │             │    └─• [strides]    Present with --strided
+#    │    │             ├─• [shape]            Present with unstructured topology;
+#    │    │             │                       == "quad" or "hex"
+#    │    │             └─• [connectivity]     Present with unstructured topology;
+#    │    │                                     flat int64 array
+#    │    └── fields
+#    │         ├── [field]                     Present without --strided
+#    │         │    ├─• association            == "element"
+#    │         │    ├─• topology               == "mesh"
+#    │         │    ├─• volume_dependent       == "false"
+#    │         │    └─• values                 Scalar element values
+#    │         ├── [vert_vals]                 Present with --strided
+#    │         │    ├─• association            == "vertex"
+#    │         │    ├─• topology               == "mesh"
+#    │         │    ├─• offsets
+#    │         │    ├─• strides
+#    │         │    └─• values                 Padded scalar vertex values
+#    │         ├── [ele_vals]                  Present with --strided
+#    │         │    ├─• association            == "element"
+#    │         │    ├─• topology               == "mesh"
+#    │         │    ├─• offsets
+#    │         │    ├─• strides
+#    │         │    └─• values                 Padded scalar element values
+#    │         └── [<analytic_field>]          Present when --field is not "none"
+#    │              ├─• association            == "vertex"
+#    │              ├─• topology               == "mesh"
+#    │              ├─• [offsets]              Present with --strided
+#    │              ├─• [strides]              Present with --strided
+#    │              └─• values                 Scalar vertex values
+#    └── [additional domains]
+#
+# <analytic_field> is the --fieldName value for sphere, plane, or gyroid.
+# With --field all, it represents dist_to_plane, dist_to_center, and gyroid_fcn.
+#
+# Run this script with --help for commands that generate representative output.
 #
 # Conduit's Python module must be available on PYTHONPATH. A Python-enabled
 # Axom build provides `bin/run_python_with_axom.sh` to set the required paths.
 #
-# The generated Blueprint hierarchy is:
-#   <bp_root>
-#    ├── <domain_i_j[_k]>          Map entry, or list child with --useList
-#    │    ├── topologies
-#    │    │   └── mesh
-#    │    │        ├─• type        == "structured" or "unstructured"
-#    │    │        ├─• coordset    == "coords"
-#    │    │        └── elements
-#    │    │             ├── dims              Structured only
-#    │    │             │    ├─• i
-#    │    │             │    ├─• j
-#    │    │             │    └─• [k]
-#    │    │             ├─• shape             Unstructured only, quad or hex
-#    │    │             └─• connectivity      Unstructured only, flat int64 connectivity
-#    │    ├── coordsets
-#    │    │   └── coords
-#    │    │        ├─• type        == "explicit"
-#    │    │        └── values      i-fastest node order; padded with --strided
-#    │    │             ├─• x
-#    │    │             ├─• y
-#    │    │             └─• [z]
-#    │    └── fields
-#    │        ├── field                        Conduit's example field
-#    │        │    ├─• association == "element"
-#    │        │    ├─• topology    == "mesh"
-#    │        │    └─• values
-#    │        └── <fieldName>                  Vertex field(s) added by --field
-#    │             ├─• association == "vertex"
-#    │             ├─• topology    == "mesh"
-#    │             ├─• [offsets]               Present with --strided
-#    │             ├─• [strides]               Present with --strided
-#    │             └─• values
-#    └── ...
-
+# This is a serial utility. It does not use MPI. `--domains` partitions the
+# mesh into domains that one process generates and writes.
 try:
     import conduit
     import conduit.blueprint
@@ -59,7 +87,11 @@ except ModuleNotFoundError as e:
     exit(-1)
 
 import numpy as np
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, RawDescriptionHelpFormatter
+
+
+class MeshHelpFormatter(ArgumentDefaultsHelpFormatter, RawDescriptionHelpFormatter):
+    pass
 
 
 def parse_component_list(values, cast):
@@ -74,8 +106,28 @@ def parse_component_list(values, cast):
 
 
 def parse_args():
-    ps = ArgumentParser(description='Write a multidomain Blueprint mesh.',
-                        formatter_class=ArgumentDefaultsHelpFormatter)
+    ps = ArgumentParser(
+        description='Generate a 2D or 3D Cartesian Blueprint mesh in one serial process. '
+        'The output may contain one or more domains and may use a structured or '
+        'unstructured topology.',
+        formatter_class=MeshHelpFormatter)
+    ps.epilog = f'''examples:
+  One compact 3x3-cell 2D structured domain with an element field:
+    {ps.prog} --protocol yaml --output cartesian_2d
+
+  Four compact 2D structured domains with a vertex sphere field:
+    {ps.prog} --res 100 80 --domains 2 2 --field sphere --output sphere_2d
+
+  Two compact 3D unstructured hex domains with a vertex gyroid field:
+    {ps.prog} --min 0 0 0 --max 6.28 6.28 6.28 --res 40 30 20 \\
+      --domains 2 1 1 --topology unstructured --field gyroid --output gyroid_3d
+
+  Two padded 2D structured domains with all three analytic vertex fields:
+    {ps.prog} --res 40,30 --domains 2,1 --strided --field all \\
+      --protocol json --output strided_2d
+
+The script does not use MPI. --domains controls how many domains this one
+process generates; do not run multiple ranks against the same output path.'''
     ps.add_argument('--useList',
                     action='store_true',
                     help='Store domains in a list instead of a map')
@@ -102,9 +154,13 @@ def parse_args():
                     dest='dc',
                     nargs='+',
                     default=('1', '1'),
-                    help='Domain counts by index direction, space- or comma-separated')
+                    help='Domain counts by index direction. Their product is the number of '
+                    'domains generated by this process; values may be space- or comma-separated')
     ps.add_argument('-o', '--output', type=str, default='mdmesh', help='Output file base name')
-    ps.add_argument('--strided', action='store_true', help='Use a padded strided-structured layout')
+    ps.add_argument('--strided',
+                    action='store_true',
+                    help='Use structured topology with fixed padded storage: '
+                    'two leading and one trailing vertex entry in every direction')
     ps.add_argument(
         '--topology',
         choices=('structured', 'unstructured'),
@@ -115,8 +171,8 @@ def parse_args():
                     choices=('none', 'sphere', 'plane', 'gyroid', 'all'),
                     default='none',
                     help='Add a vertex-associated analytic field. "all" adds dist_to_plane, '
-                    'dist_to_center, and gyroid_fcn. The Conduit example field is '
-                    'element-associated.')
+                    'dist_to_center, and gyroid_fcn. "none" omits analytic fields but retains '
+                    'Conduit\'s example field or fields.')
     ps.add_argument('--fieldName',
                     type=str,
                     default='fcn',
