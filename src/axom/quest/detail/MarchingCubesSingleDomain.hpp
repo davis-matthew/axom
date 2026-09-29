@@ -27,7 +27,9 @@
   #include "conduit_node.hpp"
 
   // C++ includes
+  #include <memory>
   #include <string>
+  #include <type_traits>
 
 namespace axom
 {
@@ -253,6 +255,30 @@ private:
 
   /// @brief Allocate MarchingCubesImpl object
   std::unique_ptr<ImplBase> newMarchingCubesImpl();
+  std::unique_ptr<ImplBase> newMarchingCubesSeqImpl(std::integral_constant<int, 2>);
+  std::unique_ptr<ImplBase> newMarchingCubesSeqImpl(std::integral_constant<int, 3>);
+  #if defined(AXOM_RUNTIME_POLICY_USE_OPENMP)
+  std::unique_ptr<ImplBase> newMarchingCubesOpenMPImpl(std::integral_constant<int, 2>);
+  std::unique_ptr<ImplBase> newMarchingCubesOpenMPImpl(std::integral_constant<int, 3>);
+  #endif
+  #if defined(AXOM_RUNTIME_POLICY_USE_CUDA)
+  std::unique_ptr<ImplBase> newMarchingCubesCudaImpl(std::integral_constant<int, 2>);
+  std::unique_ptr<ImplBase> newMarchingCubesCudaImpl(std::integral_constant<int, 3>);
+  #endif
+  #if defined(AXOM_RUNTIME_POLICY_USE_HIP)
+  std::unique_ptr<ImplBase> newMarchingCubesHipImpl(std::integral_constant<int, 2>);
+  std::unique_ptr<ImplBase> newMarchingCubesHipImpl(std::integral_constant<int, 3>);
+  #endif
+
+  /*!
+   * @brief Create the implementation for one execution policy and dimension.
+   *
+   * Defined in MarchingCubesSingleDomainPolicy.hpp.
+   * Each per-policy source file instantiates it once, so no translation unit
+   * compiles more than one MarchingCubesImpl specialization.
+   */
+  template <int DIM, typename ExecSpace, typename SequentialExecSpace>
+  std::unique_ptr<ImplBase> newMarchingCubesPolicyImpl();
 
 };  // class MarchingCubesSingleDomain
 

@@ -15,7 +15,6 @@
 #include "axom/core/execution/execution_space.hpp"
 #include "axom/quest/MarchingCubes.hpp"
 #include "axom/quest/detail/MarchingCubesSingleDomain.hpp"
-#include "axom/quest/detail/MarchingCubesImpl.hpp"
 #include "axom/fmt.hpp"
 
 namespace axom
