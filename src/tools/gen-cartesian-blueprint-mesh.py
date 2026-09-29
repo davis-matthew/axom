@@ -9,7 +9,7 @@
 # Generate a 2D or 3D Cartesian Blueprint mesh for testing.
 #
 # The in-memory Blueprint node always contains one or more domain children.
-# Conduit Relay writes the sole domain directly at the root 
+# Conduit Relay writes the sole domain directly at the root
 # when the product of --domains is one. Larger products remain multidomain.
 # The blueprint hierarchy passed to Relay is:
 #
@@ -111,20 +111,27 @@ def parse_args():
         'The output may contain one or more domains and may use a structured or '
         'unstructured topology.',
         formatter_class=MeshHelpFormatter)
-    ps.epilog = f'''examples:
-  One compact 3x3-cell 2D structured domain with an element field:
-    {ps.prog} --protocol yaml --output cartesian_2d
+    ps.epilog = f'''examples that reproduce Blueprint contents in data/quest:
+  Single-domain 12x12x12 unstructured hex mesh with a sphere field:
+    {ps.prog} --min 0,0,0 --max 1,1,1 --res 12,12,12 --domains 1,1,1 \\
+      --topology unstructured --field sphere --fieldName fcn --center .5,.5,.5 \\
+      --radius .25 --protocol hdf5 --output data/quest/mc_uhex
 
-  Four compact 2D structured domains with a vertex sphere field:
-    {ps.prog} --res 100 80 --domains 2 2 --field sphere --output sphere_2d
+  Two-domain and six-domain compact 2D structured meshes:
+    {ps.prog} --min 0,0 --max 2,2 --res 100,100 --domains 2,1 --field all \\
+      --center 1,.4 --normal 1,.4 --scale 3,3 --offset 1.25 --protocol hdf5 \\
+      --output data/quest/mdmesh.2x1
+    {ps.prog} --min 0,0 --max 2,2 --res 100,100 --domains 2,3 --field all \\
+      --center 1,.4 --normal 1,.4 --scale 3,3 --offset 1.25 --protocol hdf5 \\
+      --output data/quest/mdmesh.2x3
 
-  Two compact 3D unstructured hex domains with a vertex gyroid field:
-    {ps.prog} --min 0 0 0 --max 6.28 6.28 6.28 --res 40 30 20 \\
-      --domains 2 1 1 --topology unstructured --field gyroid --output gyroid_3d
-
-  Two padded 2D structured domains with all three analytic vertex fields:
-    {ps.prog} --res 40,30 --domains 2,1 --strided --field all \\
-      --protocol json --output strided_2d
+  Four-domain compact and padded 3D structured meshes:
+    {ps.prog} --min 0,0,0 --max 2,2,2 --res 20,20,15 --domains 2,2,1 --field all \\
+      --center 1,.4,1.2 --normal 1,.4,1.2 --scale 3,3,1.5 --offset 1.25 \\
+      --protocol hdf5 --output data/quest/mdmesh.2x2x1
+    {ps.prog} --min 0,0,0 --max 2,2,2 --res 20,20,15 --domains 2,2,1 --strided \\
+      --field all --center 1,.4,1.2 --normal 1,.4,1.2 --scale 3,3,1.5 \\
+      --offset 1.25 --protocol hdf5 --output data/quest/mdmeshg.2x2x1
 
 The script does not use MPI. --domains controls how many domains this one
 process generates; do not run multiple ranks against the same output path.'''
