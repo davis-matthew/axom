@@ -438,16 +438,22 @@ public:
 
     /*
       loopBody isn't data-parallel and shouldn't be parallelized.
-      This contrived for_all forces it to run sequentially.
+      This contrived for_all forces it to run sequentially. 
+      It must run in SequentialExecSpace, not SEQ_EXEC, since  crossingId and the views
+      live in ExecSpace's memory, which the host cannot dereference on GPU policies.
     */
-    axom::for_all<axom::SEQ_EXEC>(1, [=] AXOM_HOST_DEVICE(axom::IndexType /* i */) {
+    axom::for_all<SequentialExecSpace>(1, [=] AXOM_HOST_DEVICE(axom::IndexType /* i */) {
       *crossingId = 0;
       for(axom::IndexType n = 0; n < parentCellCount; ++n)
       {
         loopBody(n);
       }
     });
-    SLIC_ASSERT(*crossingId == m_crossingCount);
+#if defined(AXOM_DEBUG)
+    axom::IndexType serialCrossingCount = 0;
+    axom::copy(&serialCrossingCount, crossingId, sizeof(axom::IndexType));
+    SLIC_ASSERT(serialCrossingCount == m_crossingCount);
+#endif
 
     axom::deallocate(crossingId);
 
