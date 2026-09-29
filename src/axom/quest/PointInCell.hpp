@@ -7,6 +7,7 @@
 #pragma once
 
 #include "axom/config.hpp"
+#include "axom/core/ArrayView.hpp"
 #include "axom/core/Macros.hpp"
 #include "axom/slic.hpp"
 
@@ -49,8 +50,8 @@ namespace detail
  *      void computeBoundingBox(
  *          double, const std::vector< BoundingBox<double, DIM>&,
  *          const BoundingBox<double, DIM>  &) const;
- * \arg void reconstructPoint(IndexType, const double*, double*) const;
- * \arg bool locatePointInCell(IndexType, const double*, double*) const;
+ * \arg void reconstructPoint(IndexType, ArrayView<const double>, ArrayView<double>) const;
+ * \arg bool locatePointInCell(IndexType, ArrayView<const double>, ArrayView<double>) const;
  * \arg int numElements() const;
  * \arg int meshDimension() const;
  */
@@ -191,35 +192,24 @@ public:
 
     const int dim = m_meshWrapper.meshDimension();
     IndexType cellIndex = MeshTraits::NO_CELL;
-    double posBuffer[3] = {0., 0., 0.};
-    double isoparBuffer[3] = {0., 0., 0.};
-
-    // Stage raw coordinates through local 3-entry buffers before the dimension switch, then
-    // copy back only the active prefix.
-    for(int i = 0; i < dim; ++i)
+    const axom::ArrayView<const double> posView(pos, dim);
+    axom::ArrayView<double> isoparView;
+    if(isopar != nullptr)
     {
-      posBuffer[i] = pos[i];
+      isoparView = axom::ArrayView<double>(isopar, dim);
     }
 
     switch(dim)
     {
     case 2:
-      cellIndex = m_pointFinder2D->locatePoint(posBuffer, isopar != nullptr ? isoparBuffer : nullptr);
+      cellIndex = m_pointFinder2D->locatePoint(posView, isoparView);
       break;
     case 3:
-      cellIndex = m_pointFinder3D->locatePoint(posBuffer, isopar != nullptr ? isoparBuffer : nullptr);
+      cellIndex = m_pointFinder3D->locatePoint(posView, isoparView);
       break;
     default:
       SLIC_ERROR("Point in Cell query only defined for 2D or 3D meshes.");
       break;
-    }
-
-    if(isopar != nullptr)
-    {
-      for(int i = 0; i < dim; ++i)
-      {
-        isopar[i] = isoparBuffer[i];
-      }
     }
 
     return cellIndex;
@@ -263,7 +253,10 @@ public:
    */
   bool locatePointInCell(IndexType cellIdx, const double* pos, double* isopar) const
   {
-    return m_meshWrapper.locatePointInCell(cellIdx, pos, isopar);
+    const int dim = m_meshWrapper.meshDimension();
+    return m_meshWrapper.locatePointInCell(cellIdx,
+                                           axom::ArrayView<const double>(pos, dim),
+                                           axom::ArrayView<double>(isopar, dim));
   }
 
   /*!
@@ -276,7 +269,10 @@ public:
    */
   void reconstructPoint(IndexType cellIdx, const double* isopar, double* pos) const
   {
-    m_meshWrapper.reconstructPoint(cellIdx, isopar, pos);
+    const int dim = m_meshWrapper.meshDimension();
+    m_meshWrapper.reconstructPoint(cellIdx,
+                                   axom::ArrayView<const double>(isopar, dim),
+                                   axom::ArrayView<double>(pos, dim));
   }
 
   /*! Returns the dimension of the mesh */

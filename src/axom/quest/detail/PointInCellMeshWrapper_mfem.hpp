@@ -23,6 +23,7 @@
  */
 
 #include "axom/config.hpp"
+#include "axom/core/ArrayView.hpp"
 #include "axom/core/Macros.hpp"
 
 #include "axom/slic/interface/slic.hpp"
@@ -277,21 +278,24 @@ public:
    * \param [in[ isopar The isoparametric coordinates at which to evaluate
    * \param [out] pos The computed coordinates of the evaluated point
    *
-   * \pre \a isopar must be non-NULL and have \a meshDimension() coordinates
-   * \pre \a pt must be non-NULL and have space for \a meshDimension() coords
+   * \pre \a isopar must have \a meshDimension() coordinates
+   * \pre \a pt must have space for \a meshDimension() coordinates
    *
    * \sa PointInCell::reconstructPoint()
    */
-  void reconstructPoint(IndexType eltIdx, const double* isopar, double* pt) const
+  void reconstructPoint(IndexType eltIdx,
+                        axom::ArrayView<const double> isopar,
+                        axom::ArrayView<double> pt) const
   {
     const int dim = meshDimension();
+    SLIC_ASSERT(isopar.size() == dim);
+    SLIC_ASSERT(pt.size() == dim);
 
     mfem::IsoparametricTransformation tr;
     m_mesh->GetElementTransformation(eltIdx, &tr);
 
     mfem::IntegrationPoint ip;
-    // MFEM's IntegrationPoint::Set/Get touch a 3-entry buffer even for 2D elements.
-    // Stage 2D isoparametric coordinates through a local 3-vector before copying the active prefix.
+    // MFEM's IntegrationPoint::Set touches a 3-entry buffer even for 2D elements.
     double mfemIsopar[3] = {0., 0., 0.};
     for(int i = 0; i < dim; ++i)
     {
@@ -299,7 +303,7 @@ public:
     }
     ip.Set(mfemIsopar, dim);
 
-    mfem::Vector v(pt, dim);
+    mfem::Vector v(pt.data(), dim);
     tr.Transform(ip, v);
   }
 
@@ -312,13 +316,17 @@ public:
    *
    * \sa PointInCell::locatePointInCell()
    */
-  bool locatePointInCell(IndexType eltIdx, const double* pt, double* isopar) const
+  bool locatePointInCell(IndexType eltIdx,
+                         axom::ArrayView<const double> pt,
+                         axom::ArrayView<double> isopar) const
   {
     const int dim = meshDimension();
+    SLIC_ASSERT(pt.size() == dim);
+    SLIC_ASSERT(isopar.size() == dim);
 
     mfem::IsoparametricTransformation tr;
     m_mesh->GetElementTransformation(eltIdx, &tr);
-    mfem::Vector ptSpace(const_cast<double*>(pt), dim);
+    mfem::Vector ptSpace(const_cast<double*>(pt.data()), dim);
 
     mfem::IntegrationPoint ipRef;
 
@@ -335,6 +343,7 @@ public:
     // Status codes: {0 -> successful; 1 -> outside elt; 2-> did not converge}
     int err = invTrans.Transform(ptSpace, ipRef);
 
+    // MFEM's IntegrationPoint::Get touches a 3-entry buffer even for 2D elements.
     double mfemIsopar[3] = {0., 0., 0.};
     ipRef.Get(mfemIsopar, dim);
     for(int i = 0; i < dim; ++i)
