@@ -201,6 +201,21 @@ an abi3 wheel is still specific to the host-config it was built against.
 Free-threaded (`abi3t`) wheels are not built today; scikit-build-core 1.0+
 can emit those tags once the bindings and Conduit run under a free-threaded interpreter.
 
+`wheel.py-api` is deliberately not set in `pyproject.toml` since it would tag
+every wheel as `cp312`, including non-stable builds on Python < 3.12.
+
+### Source distributions (sdist)
+
+An sdist of this project is not self-contained, and standalone-sdist/PyPI distribution is
+out of scope. The binding translation unit lives with its component
+(`src/axom/sidre/nanobind_sidre.cpp`), outside this project directory, and scikit-build-core
+restricts sdist contents to the project root.
+The version is also read from `src/cmake/AxomVersion.cmake`, which would not work for sdist.
+The supported build paths therefore compile from a full repository checkout
+(`pip install ./src/python`, `uv build src/python`).
+If/when this changes, we will need to vendor the translation unit into this tree
+in a pre-sdist step, or move the project root above it.
+
 ### Package metadata and extras
 
 Wheel metadata is static, but whether the underlying Axom is an MPI build is a build-time choice,

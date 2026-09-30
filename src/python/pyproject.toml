@@ -91,25 +91,8 @@ build-dir = "build/{wheel_tag}"
 # The compiled extension and its generated _sidre.pyi are installed by CMakeLists.txt into axom/sidre/.
 wheel.packages = ["src/axom"]
 
-# NOTE on the sdist: the binding translation unit lives with its component (../axom/sidre/nanobind_sidre.cpp), outside this project directory.
-# A `sdist.include = ["../axom/..."]` entry does NOT vendor it -- scikit-build-core restricts sdist contents to the project root
-# and silently drops out-of-tree paths (verified with scikit-build-core 1.0.3).
-# The resulting sdist is therefore not self-contained: the supported build paths
-# compile from a full repo checkout (`pip install ./src/python`, `uv build src/python`),
-# where CMakeLists.txt reads the TU from its on-disk relative path.
-# Standalone-sdist / PyPI distribution is out of scope.
-# If that ever changes, vendor the TU into this tree during a pre-sdist step (or move the project root above the TU).
-#
-# STABLE_ABI / abi3 (cp312): opt-in, so the default build produces per-Python-version wheel tags.
-# To build one abi3 wheel that serves every CPython >= 3.12 on the machine, use CMake >= 3.26
-# and Python >= 3.12, and pass BOTH of these at build time. They must agree, since the first
-# makes nanobind build the limited-API module and the second sets the wheel tag:
-#   uv build --wheel -C cmake.define.AXOM_PYTHON_STABLE_ABI=ON -C wheel.py-api=cp312 ...
-#
-# wheel.py-api is intentionally left unset here rather than hard-coded to cp312:
-# hard-coding it would tag every wheel cp312 even when built non-stable on < 3.12.
-# wheel.py-api = "cp312"   # set via -C wheel.py-api=cp312 in the abi3 build only
-
+# sdist support and abi3 wheel tags are not configured here:
+# see "Source distributions (sdist)" and "Stable ABI (abi3)" in src/python/README.md.
 
 [tool.scikit-build.cmake.define]
 # Resolve libsidre/libconduit/HDF5 from their install locations at runtime with no LD_LIBRARY_PATH.
