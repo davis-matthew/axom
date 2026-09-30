@@ -308,7 +308,7 @@ private:
   MarchingCubesDataParallelism m_dataParallelism = MarchingCubesDataParallelism::byPolicy;
 
   //! @brief Number of domains.
-  axom::IndexType m_domainCount;
+  axom::IndexType m_domainCount {0};
 
   /*!
    * @brief Single-domain implementations.

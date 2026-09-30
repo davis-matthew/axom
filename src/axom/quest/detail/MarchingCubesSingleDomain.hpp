@@ -20,6 +20,8 @@
 
   // Axom includes
   #include "axom/core/execution/runtime_policy.hpp"
+  #include "axom/fmt.hpp"
+  #include "axom/slic.hpp"
   #include "axom/mint/mesh/UnstructuredMesh.hpp"
   #include "axom/quest/MarchingCubes.hpp"
 
@@ -97,9 +99,15 @@ public:
   {
     m_fcnFieldName = fcnField;
     m_fcnPath = "fields/" + fcnField;
-    SLIC_ASSERT(m_dom->has_path(m_fcnPath));
-    SLIC_ASSERT(m_dom->fetch_existing(m_fcnPath + "/association").as_string() == "vertex");
-    SLIC_ASSERT(m_dom->has_path(m_fcnPath + "/values"));
+    SLIC_ERROR_IF(!m_dom->has_path(m_fcnPath + "/values"),
+                  axom::fmt::format("MarchingCubes: the domain has no field '{}'.", fcnField));
+
+    const std::string association = m_dom->fetch_existing(m_fcnPath + "/association").as_string();
+    SLIC_ERROR_IF(association != "vertex",
+                  axom::fmt::format("MarchingCubes requires a vertex-associated field, "
+                                    "but field '{}' has association '{}'.",
+                                    fcnField,
+                                    association));
     m_impl->setFunctionField(fcnField);
   }
 

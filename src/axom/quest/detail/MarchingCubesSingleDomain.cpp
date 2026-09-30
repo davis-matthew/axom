@@ -48,17 +48,32 @@ void MarchingCubesSingleDomain::setDomain(const conduit::Node& dom,
   SLIC_ASSERT_MSG(!conduit::blueprint::mesh::is_multi_domain(dom),
                   "Internal error.  Attempt to set a multi-domain mesh in "
                   "MarchingCubesSingleDomain.");
-  SLIC_ASSERT(dom.fetch_existing("topologies/" + m_topologyName + "/type").as_string() ==
-              "structured");
+
+  SLIC_ERROR_IF(!dom.has_path("topologies/" + m_topologyName),
+                axom::fmt::format("MarchingCubes: the domain has no topology '{}'.", m_topologyName));
+
+  const std::string topologyType =
+    dom.fetch_existing("topologies/" + m_topologyName + "/type").as_string();
+  SLIC_ERROR_IF(topologyType != "structured",
+                axom::fmt::format("MarchingCubes requires a structured topology, "
+                                  "but topology '{}' has type '{}'.",
+                                  m_topologyName,
+                                  topologyType));
 
   const std::string coordsetPath =
     "coordsets/" + dom.fetch_existing("topologies/" + m_topologyName + "/coordset").as_string();
-  SLIC_ASSERT(dom.has_path(coordsetPath));
+  SLIC_ERROR_IF(!dom.has_path(coordsetPath),
+                axom::fmt::format("MarchingCubes: the domain has no '{}' for topology '{}'.",
+                                  coordsetPath,
+                                  m_topologyName));
 
-  if(!m_maskPath.empty())
+  m_maskFieldName = maskField;
+  if(!m_maskFieldName.empty())
   {
-    m_maskPath = maskField.empty() ? std::string() : "fields/" + maskField;
-    SLIC_ASSERT(dom.has_path(m_maskPath + "/values"));
+    m_maskPath = "fields/" + m_maskFieldName;
+    SLIC_ERROR_IF(
+      !dom.has_path(m_maskPath + "/values"),
+      axom::fmt::format("MarchingCubes: the domain has no mask field '{}'.", m_maskFieldName));
   }
   else
   {
@@ -69,11 +84,17 @@ void MarchingCubesSingleDomain::setDomain(const conduit::Node& dom,
 
   m_ndim = conduit::blueprint::mesh::topology::dims(
     dom.fetch_existing(axom::fmt::format("topologies/{}", m_topologyName)));
-  SLIC_ASSERT(m_ndim >= 2 && m_ndim <= 3);
+  SLIC_ERROR_IF(m_ndim < 2 || m_ndim > 3,
+                axom::fmt::format("MarchingCubes supports 2D and 3D meshes, "
+                                  "but topology '{}' is {}D.",
+                                  m_topologyName,
+                                  m_ndim));
 
-  SLIC_ASSERT_MSG(
-    !conduit::blueprint::mcarray::is_interleaved(dom.fetch_existing(coordsetPath + "/values")),
-    "MarchingCubes currently requires contiguous coordinates layout.");
+  SLIC_ERROR_IF(
+    conduit::blueprint::mcarray::is_interleaved(dom.fetch_existing(coordsetPath + "/values")),
+    axom::fmt::format("MarchingCubes requires a contiguous coordinate layout, "
+                      "but '{}' is interleaved.",
+                      coordsetPath));
 
   m_impl = newMarchingCubesImpl();
 

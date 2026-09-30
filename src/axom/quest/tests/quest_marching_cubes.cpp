@@ -29,7 +29,9 @@
 #include <conduit/conduit_blueprint.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <string>
 #include <vector>
@@ -793,6 +795,143 @@ void testMintOutput()
 
 TEST(quest_marching_cubes, mint_output_2d) { testMintOutput<2>(); }
 TEST(quest_marching_cubes, mint_output_3d) { testMintOutput<3>(); }
+
+//---------------------------------------------------------------------------
+// Use before setMesh() and input validation
+//---------------------------------------------------------------------------
+
+TEST(quest_marching_cubes, calls_before_set_mesh)
+{
+  using axom::quest::MarchingCubes;
+
+  // Construct in storage that holds a nonzero byte pattern, so a member that
+  // the constructor leaves uninitialized reads as garbage instead of zero.
+  alignas(MarchingCubes) unsigned char storage[sizeof(MarchingCubes)];
+  std::fill(std::begin(storage), std::end(storage), static_cast<unsigned char>(0x5a));
+  auto* mc = new(storage)
+    MarchingCubes(RuntimePolicy::seq, mctest::hostAllocatorID(), DataParallelism::byPolicy);
+
+  EXPECT_EQ(mc->getContourCellCount(), 0);
+  EXPECT_EQ(mc->getContourNodeCount(), 0);
+  mc->setFunctionField("fcn");
+  mc->computeIsocontour(0.5);
+  EXPECT_EQ(mc->getContourCellCount(), 0);
+  EXPECT_EQ(mc->getContourNodeCount(), 0);
+  mc->clearOutput();
+  EXPECT_EQ(mc->getContourCellCount(), 0);
+
+  mc->~MarchingCubes();
+}
+
+namespace
+{
+//! @brief A small 2D structured test domain with a vertex field "fcn" and a cell field "mask".
+void buildValidationDomain(conduit::Node& dom)
+{
+  mctest::buildStructured<2>(dom, 4, mctest::PlanarField(Vec3 {1., 0., 0.}, 0.3), "fcn");
+  mctest::addCellField<2>(dom, [](int, int, int) { return 1; }, "mask");
+}
+
+/*!
+ * @brief Expect setMesh() (and setFunctionField(), if @a fcnField is not empty)
+ *        to report a SLIC error for @a dom.
+ *
+ * The error must come from SLIC in every build type, not from a Conduit
+ * exception or a debug-only assertion.
+ */
+void expectInputError(const conduit::Node& dom,
+                      const std::string& maskField = {},
+                      const std::string& fcnField = {})
+{
+  conduit::Node mdMesh;
+  wrapAsMultiDomain(mdMesh, dom);
+  axom::quest::MarchingCubes mc(RuntimePolicy::seq,
+                                mctest::hostAllocatorID(),
+                                DataParallelism::byPolicy);
+
+  axom::slic::ScopedAbortToThrow abortGuard;
+  if(fcnField.empty())
+  {
+    EXPECT_THROW(mc.setMesh(mdMesh, "mesh", maskField), axom::slic::SlicAbortException);
+  }
+  else
+  {
+    mc.setMesh(mdMesh, "mesh", maskField);
+    EXPECT_THROW(mc.setFunctionField(fcnField), axom::slic::SlicAbortException);
+  }
+}
+}  // end anonymous namespace
+
+TEST(quest_marching_cubes, rejects_unstructured_topology)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  dom["topologies/mesh/type"] = "unstructured";
+  expectInputError(dom);
+}
+
+TEST(quest_marching_cubes, rejects_missing_coordset)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  dom["topologies/mesh/coordset"] = "no_such_coordset";
+  expectInputError(dom);
+}
+
+TEST(quest_marching_cubes, rejects_one_dimensional_mesh)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  // Conduit derives a structured topology's dimension from its coordset.
+  dom["topologies/mesh/elements/dims"].remove("j");
+  dom["coordsets/coords/values"].remove("y");
+  expectInputError(dom);
+}
+
+TEST(quest_marching_cubes, rejects_interleaved_coordinates)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+
+  // Rewrite the coordinates as one interleaved xyxy... buffer.
+  const conduit::Node& values = dom["coordsets/coords/values"];
+  const auto n = values["x"].dtype().number_of_elements();
+  std::vector<double> xy(2 * n);
+  for(conduit::index_t i = 0; i < n; ++i)
+  {
+    xy[2 * i] = values["x"].as_float64_ptr()[i];
+    xy[2 * i + 1] = values["y"].as_float64_ptr()[i];
+  }
+  constexpr conduit::index_t stride = 2 * sizeof(double);
+  dom["coordsets/coords/values/x"].set_external(conduit::DataType::float64(n, 0, stride), xy.data());
+  dom["coordsets/coords/values/y"].set_external(conduit::DataType::float64(n, sizeof(double), stride),
+                                                xy.data());
+  ASSERT_TRUE(conduit::blueprint::mcarray::is_interleaved(dom["coordsets/coords/values"]));
+
+  expectInputError(dom);
+}
+
+TEST(quest_marching_cubes, rejects_missing_mask_field)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  expectInputError(dom, "no_such_mask");
+}
+
+TEST(quest_marching_cubes, rejects_missing_function_field)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  expectInputError(dom, {}, "no_such_field");
+}
+
+TEST(quest_marching_cubes, rejects_element_function_field)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  // "mask" exists but is element-associated; the contour field must be nodal.
+  expectInputError(dom, {}, "mask");
+}
 
 //---------------------------------------------------------------------------
 int main(int argc, char* argv[])
