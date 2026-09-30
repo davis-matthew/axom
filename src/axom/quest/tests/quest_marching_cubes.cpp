@@ -524,8 +524,23 @@ void testMultiDomain()
 TEST(quest_marching_cubes, multi_domain_2d) { testMultiDomain<2>(); }
 TEST(quest_marching_cubes, multi_domain_3d) { testMultiDomain<3>(); }
 
+//! @brief Convert an \c int32 index array at @a path in @a node to \c int64.
+void convertToInt64(conduit::Node& node, const std::string& path)
+{
+  conduit::Node converted;
+  node.fetch_existing(path).to_int64_array(converted);
+  node[path].set(converted);
+}
+
+/*!
+ * @brief Contour a strided mesh with ghost layers.
+ *
+ * With @a int64Metadata, the layout offsets and strides are \c int64 instead of \c int32,
+ * covering both index types that MeshViewUtil accepts. On device policies, copyBlueprintToPolicy()
+ * moves these arrays to device memory.
+ */
 template <int DIM>
-void testStridedMesh()
+void testStridedMesh(bool int64Metadata)
 {
   constexpr int n = 8;
   constexpr int pad = 2;
@@ -534,6 +549,17 @@ void testStridedMesh()
 
   conduit::Node dom, mdMesh;
   mctest::buildStridedStructured<DIM>(dom, n, pad, f, "fcn");
+  if(int64Metadata)
+  {
+    for(const char* path : {"topologies/mesh/elements/dims/offsets",
+                            "topologies/mesh/elements/dims/strides",
+                            "fields/fcn/offsets",
+                            "fields/fcn/strides"})
+    {
+      convertToInt64(dom, path);
+      ASSERT_TRUE(dom.fetch_existing(path).dtype().is_int64());
+    }
+  }
   wrapAsMultiDomain(mdMesh, dom);
 
   // The ghost layers continue the grid, so any ghost cell that entered the
@@ -547,8 +573,10 @@ void testStridedMesh()
   });
 }
 
-TEST(quest_marching_cubes, strided_mesh_2d) { testStridedMesh<2>(); }
-TEST(quest_marching_cubes, strided_mesh_3d) { testStridedMesh<3>(); }
+TEST(quest_marching_cubes, strided_mesh_2d) { testStridedMesh<2>(false); }
+TEST(quest_marching_cubes, strided_mesh_3d) { testStridedMesh<3>(false); }
+TEST(quest_marching_cubes, strided_mesh_int64_metadata_2d) { testStridedMesh<2>(true); }
+TEST(quest_marching_cubes, strided_mesh_int64_metadata_3d) { testStridedMesh<3>(true); }
 
 template <int DIM>
 void testMask()
