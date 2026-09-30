@@ -114,7 +114,16 @@ Use an absolute ``AXOM_DIR`` pointing at the Axom install prefix
    $ uv pip install /path/to/axom/src/python \
        -C cmake.define.AXOM_DIR="$AXOM_INSTALL"
 
-   $ uv run python -c "import axom.sidre, conduit, numpy; print(axom.__version__)"
+   $ uv run [--no-project] python -c "import axom.sidre, conduit, numpy; print(axom.__version__)"
+
+.. note::
+   You might need to pass  ``--no-project`` to ``uv run`` in these commands 
+   (or activate the venv with ``source .venv/bin/activate`` and run ``python`` directly).
+   Without it, ``uv run`` looks for a ``pyproject.toml`` in the current directory
+   and its parents, and rebuilds/installs that project before running.
+   Inside ``src/python`` that project is the Axom wheel itself, rebuilt without ``AXOM_DIR``.
+   ``--no-sync`` skips the rebuild but runs that project's own ``.venv``,
+   which might differ from the venv created above.
 
 Optional dependencies use the normal Python extras syntax on the local source
 path. Keep the same CMake ``-C`` options used for the Axom install:
@@ -140,18 +149,18 @@ An Axom install records this path as ``AXOM_CONDUIT_PYTHON_MODULE_DIR`` in ``axo
 
    $ CONDUIT_PY_DIR=/path/to/conduit/install/python-modules
    $ printf '%s\n' "$CONDUIT_PY_DIR" > \
-       "$(uv run python -c 'import sysconfig; print(sysconfig.get_paths()["platlib"])')/axom-conduit.pth"
-   $ uv run python -c "import axom.sidre, conduit; print(conduit.__file__)"
+       "$(uv run [--no-project] python -c 'import sysconfig; print(sysconfig.get_paths()["platlib"])')/axom-conduit.pth"
+   $ uv run [--no-project] python -c "import axom.sidre, conduit; print(conduit.__file__)"
 
 If your site publishes a host-config-specific wheelhouse, install from the path
 they provide with ``uv pip install axom --find-links <wheelhouse>``.
 Axom does not assume a central wheelhouse.
 
-The installed wheel also carries a CMake host-config for downstream projects:
+The installed wheel also contains a CMake host-config for downstream projects:
 
 .. code-block:: bash
 
-   $ cmake -C "$(uv run axom-python-config --host-config)" -S /path/to/project -B build
+   $ cmake -C "$(uv run [--no-project] axom-python-config --host-config)" -S /path/to/project -B build
 
 For build details, including MPI compiler wrappers, editable installs,
 and stable ABI wheels, see ``src/python/README.md``.
@@ -167,8 +176,8 @@ Add Jupyter to the same venv and register it as a kernel:
 .. code-block:: bash
 
    $ uv pip install jupyterlab ipykernel
-   $ uv run python -m ipykernel install --user --name axom --display-name "Axom (uv)"
-   $ uv run jupyter lab
+   $ uv run [--no-project] python -m ipykernel install --user --name axom --display-name "Axom (uv)"
+   $ uv run [--no-project] jupyter lab
 
 For more IDE-like completions, signature help, and hover documentation in JupyterLab,
 install the language-server packages in the same venv:
