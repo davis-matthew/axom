@@ -273,6 +273,15 @@ public:
     facetNodeCoords.swap(m_facetNodeCoords);
     facetParentIds.swap(m_facetParentIds);
     facetDomainIds.swap(m_facetDomainIds);
+
+    // The swaps left this object holding the caller's arrays, whose allocator
+    // may differ from m_allocatorID. Recreate empty outputs in this object's
+    // memory space so later computeIsocontour() kernels can write to them.
+    const axom::StackArray<axom::IndexType, 2> twoZeros {0, 0};
+    m_facetNodeIds = axom::Array<axom::IndexType, 2>(twoZeros, m_allocatorID);
+    m_facetNodeCoords = axom::Array<double, 2>(twoZeros, m_allocatorID);
+    m_facetParentIds = axom::Array<axom::IndexType>(0, 0, m_allocatorID);
+    m_facetDomainIds = axom::Array<axom::IndexType>(0, 0, m_allocatorID);
   }
   ///@}
 
