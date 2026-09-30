@@ -7,29 +7,22 @@
 # SPDX-License-Identifier: (BSD-3-Clause)
 ##############################################################################
 
-# Build the thin, pip/uv-installable Axom wheel and exercise it end to end,
-# without using the run_python_with_axom.sh wrapper or updating the PYTHONPATH:
-#
-#   1. build the wheel from src/python against the prebuilt Axom install
-#      whose prefix is given by AXOM_DIR or AXOM_INSTALL (find_package(axom));
-#   2. install the wheel into a fresh uv venv;
-#   3. verify the wheel installed axom-conduit.pth for the same-build Conduit python module;
-#   4. run the Sidre Python test suite with plain pytest.
-#
-# Intended for the gcc docker image, which is nanobind-enabled.
+# Build a wheel against an installed Axom, install it in a fresh uv venv,
+# check axom-conduit.pth, and run the Sidre Python tests with pytest.
+# The test avoids PYTHONPATH changes and the run_python_with_axom.sh wrapper.
+# Run in the nanobind-enabled GCC Docker image.
 #
 # Required environment:
 #   HOST_CONFIG            host-config the Axom install was configured with; it supplies the
 #                          compilers, which the installed axom-config.cmake does not record
 #   AXOM_DIR/AXOM_INSTALL  Axom install prefix
 
-# Fail on the first error, including inside pipelines, and trace every command so
-# a CI failure is readable from the log alone.
+# Stop on errors, including pipeline failures, and log each command.
 set -e
 set -o pipefail
 set -x
 
-# No default: a wrong host-config would silently build the binding with the wrong compiler
+# Require the Axom install's host-config to select matching compilers.
 if [[ -z "${HOST_CONFIG:-}" ]]; then
     echo "ERROR: HOST_CONFIG is not set." >&2
     echo "       Set it to the host-config used to configure the Axom install," >&2
@@ -63,8 +56,7 @@ fi
 HOST_CONFIG_PATH=$(absolute_path "${HOST_CONFIG}")
 echo "HOST_CONFIG_PATH=${HOST_CONFIG_PATH}"
 
-# extract the value from the first CMake line of the form `set(${name} ON ...)` or
-# `set(${name} "ON")` in a file, then capitalizes it and looks for true-like patterns
+# Read the first set() value for the variable and check for ON, TRUE, YES, or 1.
 cmake_bool_from_file_is_on() {
     local file="$1"
     local name="$2"
@@ -82,7 +74,6 @@ cmake_bool_from_file_is_on() {
     [[ "${value}" == "ON" || "${value}" == "TRUE" || "${value}" == "YES" || "${value}" == "1" ]]
 }
 
-# AXOM_DIR is the Axom install prefix
 AXOM_DIR="${AXOM_DIR:-${AXOM_INSTALL:-}}"
 if [[ -z "${AXOM_DIR}" || ! -f "${AXOM_DIR%/}/lib/cmake/axom-config.cmake" ]]; then
     echo "ERROR: Axom install not found." >&2
@@ -93,7 +84,7 @@ fi
 AXOM_DIR=$(absolute_path "${AXOM_DIR}")
 echo "AXOM_DIR=${AXOM_DIR}"
 
-# Determine whether MPI is enabled/disabled from host-config
+# Read MPI support from the installed Axom configuration.
 AXOM_WHEEL_ENABLE_MPI=OFF
 if cmake_bool_from_file_is_on "${AXOM_DIR}/lib/cmake/axom-config.cmake" AXOM_USE_MPI; then
     AXOM_WHEEL_ENABLE_MPI=ON
@@ -101,10 +92,8 @@ fi
 echo "AXOM_WHEEL_ENABLE_MPI=${AXOM_WHEEL_ENABLE_MPI}"
 
 echo "~~~~~~ ENSURE uv IS AVAILABLE ~~~~~~"
-# Use a uv already on PATH (e.g. a developer machine); otherwise bootstrap a pinned one.
-# `pip install --target` writes to a private directory rather than into the interpreter's
-# environment, so it does not needs --user or --break-system-packages 
-# on PEP 668 (EXTERNALLY-MANAGED) distro Pythons such as Ubuntu 24.04's.
+# Use uv from PATH or install the pinned version in a separate directory.
+# --target avoids modifying a system-managed Python environment.
 AXOM_UV_VERSION="${AXOM_UV_VERSION:-0.12.21}"
 if ! command -v uv >/dev/null 2>&1; then
     UV_BOOTSTRAP_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/axom-uv-${AXOM_UV_VERSION}"
@@ -114,8 +103,7 @@ fi
 uv --version
 
 echo "~~~~~~ BUILD THE THIN WHEEL FROM src/python ~~~~~~"
-# Point find_package at the install with AXOM_DIR
-# Conduit resolves transitively from axom's config, which records its Conduit prefix
+# axom-config.cmake records the Conduit install to use.
 rm -rf dist
 uv build --wheel \
     -C cmake.args=-C \
@@ -131,7 +119,7 @@ if [[ -z "${AXOM_WHEEL}" ]]; then
 fi
 
 echo "~~~~~~ FRESH VENV + INSTALL THE WHEEL ~~~~~~"
-# Pin the interpreter that built the wheel, so the venv cannot pick a different one.
+# Use the runner's python3 for the test venv.
 VENV_DIR=/tmp/axom-wheel-venv
 rm -rf "${VENV_DIR}"
 uv venv --python "$(command -v python3)" "${VENV_DIR}"

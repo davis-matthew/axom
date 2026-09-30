@@ -17,34 +17,18 @@ It is consumed by two independent build paths that must produce the same on-disk
    (so the build tree is import-ready) and installs them under `AXOM_PYTHON_MODULE_INSTALL_PREFIX`.
    The compiled extension (`_sidre`) and its type stub are emitted into this layout by the build; they are not checked in.
 
-2. **The pip/uv wheel (out of tree).** A thin, binding-only wheel built with scikit-build-core
-   (the `pyproject.toml` and `CMakeLists.txt` beside this file). It treats this directory as its
-   package root (`wheel.packages = ["src/axom"]`) and compiles the binding translation unit against
-   an already-installed Axom.
+2. **The pip/uv wheel.** The `pyproject.toml` and `CMakeLists.txt` beside this file
+   use scikit-build-core to compile the bindings against an installed Axom.
+   CMake finds that install with `find_package(axom CONFIG REQUIRED)`, and
+   `wheel.packages = ["src/axom"]` includes the Python sources.
 
-This file discusses contributor-facing concerns. Installing and using the bindings is documented
-in the Sidre user guide's "Python interface" page (`src/axom/sidre/docs/sphinx/python_interface.rst`).
+Both builds compile `src/axom/sidre/nanobind_sidre.cpp` with `NB_DOMAIN axom`
+and install the same Python package. The wheel requires an existing installation
+of Axom and its third-party libraries. Its `conduit` Python module must come
+from the Conduit build that Axom links.
 
-## Build paths at a glance
-
-Both build paths install the same package layout and should expose the same Python API:
-
-- the **same** binding translation unit (`src/axom/sidre/nanobind_sidre.cpp`)
-- under the **same** nanobind domain (`NB_DOMAIN axom`)
-- with the **same** pure-Python tree from this directory.
-
-They differ in where the Axom C++ libraries come from:
-
-- **In-tree CMake build.** Axom's normal CMake build compiles the C++ libraries,
-  builds `_sidre` in the same build tree, stages the package under `<build>/python/`,
-  and installs it under `AXOM_PYTHON_MODULE_INSTALL_PREFIX`.
-- **Thin pip/uv wheel.** The scikit-build-core project in this directory consumes
-  an already-installed Axom via `find_package(axom CONFIG REQUIRED)` and compiles
-  only the Python binding module against that install.
-
-The wheel deliberately does not build Axom, Conduit, HDF5, RAJA, Umpire, MPI, or other TPLs.
-Those come from the CMake/spack side. Conduit is also not listed as a Python dependency
-because `axom.sidre` must import the Python module from the same Conduit build that Axom links.
+This README covers building and packaging. For installation and usage, see the
+Sidre user guide's [Python interface](../axom/sidre/docs/sphinx/python_interface.rst).
 
 ## Layout
 
@@ -69,10 +53,10 @@ src/python/
 
 Parenthesized entries are build products and are intentionally not in the repository.
 
-Both build paths install this tree. Only the wheel build additionally generates
-`axom/share/axom-python-host-config.cmake` and `axom/share/axom-python-env.sh`;
-on a CMake installation `axom.config.has_wheel_config()` returns `False` and the
-path accessors raise `FileNotFoundError` with that explanation.
+The wheel build also generates `axom/share/axom-python-host-config.cmake` and
+`axom/share/axom-python-env.sh`. In a CMake installation these files are absent,
+so `axom.config.has_wheel_config()` returns `False` and the path accessors raise
+`FileNotFoundError`.
 
 Each bound Axom component installs as a submodule of the `axom` package
 (`axom.sidre`, and later `axom.quest`, `axom.primal`, ...).
@@ -89,13 +73,13 @@ A submodule is importable only when its component was enabled in the underlying 
 
 ## Wheel build reference
 
-The wheel compiles Axom's Python binding against an existing Axom install.
-It is specific to that install and host-config; it is not repaired with `auditwheel`
-and is not intended for PyPI.
+The wheel depends on the Axom install and host-config used to build it.
+It does not bundle shared libraries with `auditwheel` and is not intended for PyPI.
 
-Use an absolute `AXOM_DIR` pointing at the Axom install prefix:
+Set `AXOM_INSTALL` to the absolute Axom install prefix and pass it as `AXOM_DIR`:
 
 ```bash
+AXOM_INSTALL=/absolute/path/to/axom/install
 uv build --wheel -C cmake.define.AXOM_DIR="$AXOM_INSTALL" src/python
 ```
 
@@ -104,7 +88,7 @@ that holds `axom-config.cmake` directly. CMake's own package variable, `axom_DIR
 takes precedence when set. Do not use `CMAKE_PREFIX_PATH` for `uv build` or `uv pip install`
 since scikit-build-core uses it internally for the isolated build environment.
 
-Conduit and its Python package path are found through `axom-config.cmake` in the normal case.
+CMake reads the Conduit install and Python package paths from `axom-config.cmake`.
 Add `Conduit_DIR` only if Axom's recorded Conduit package path no longer resolves:
 
 ```bash
@@ -124,13 +108,12 @@ uv build --wheel \
   src/python
 ```
 
-Note the deliberately distinct name: `CONDUIT_PYTHON_MODULE_DIR` cannot be used here.
-`find_package(axom)` pulls in `ConduitConfig.cmake`, which sets that variable with a plain
-`set()` and so overwrites whatever the caller passed.
+Use `AXOM_PYTHON_CONDUIT_MODULE_DIR` for this override. `find_package(axom)` loads
+`ConduitConfig.cmake`, whose `set()` shadows caller-supplied cache values for
+`CONDUIT_PYTHON_MODULE_DIR`.
 
-When building against a host-config, pass the same cache script used for the
-Axom install instead of duplicating compiler and MPI settings one variable at a
-time:
+To match the Axom install's compiler and MPI settings, pass the host-config
+used to build it:
 
 ```bash
 uv build --wheel \
@@ -150,38 +133,35 @@ axom-python-config --host-config  # path to axom/share/axom-python-host-config.c
 axom-python-config --env-script   # path to axom/share/axom-python-env.sh
 ```
 
-The host-config seeds a downstream CMake project with the same Axom, Conduit,
-compiler, `ENABLE_MPI`, MPI wrapper and Python settings the wheel used; the env script
-exports the subset of those that CMake reads from the environment. Both are generated only
-by this wheel build, not by the in-tree CMake install. See the "pip / uv wheel"
-section of the Sidre user guide for the usage examples.
+The host-config sets Axom and Conduit paths, compilers, MPI options, and the Python
+interpreter for a downstream CMake project. The environment script exports
+package paths and compilers that CMake reads, plus variables describing the build.
+See the "pip / uv wheel" section of the Sidre user guide for examples.
 
-### Developer loop (editable, rebuild-on-import)
+### Editable installs
 
-nanobind's recommended editable flow rebuilds the extension automatically when
-you re-import it after editing the binding source. Rebuild-on-import is a
-scikit-build-core *experimental* feature (`editable.rebuild=true`) and may change;
-if it misbehaves, reinstall the editable wheel to force a rebuild:
+With `editable.rebuild=true`, scikit-build-core rebuilds the extension when a
+Python process imports it after a source change. This feature is experimental.
+If the rebuild fails, rerun the editable install:
 
 ```bash
-uv pip install nanobind 'scikit-build-core[pyproject]'
-uv pip install -e src/python --no-build-isolation \
+uv pip install nanobind 'scikit-build-core[pyproject]' numpy
+uv pip install -e 'src/python[test]' --no-build-isolation \
   -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   -C build-dir=build/py -C editable.rebuild=true
 source .venv/bin/activate
 (cd "$(mktemp -d)" && python -m pytest -o python_files='*_Py.py' "$OLDPWD/src/axom/sidre/tests/")
 ```
 
-Note that Axom's Python tests are named `*_Py.py`, which pytest's default `python_files` patterns do not match
-and several tests write output files into the current directory, so we run them from a scratch directory.
+The `python_files` option lets pytest discover Axom's `*_Py.py` tests. Run them
+from a scratch directory because several tests write to the current directory.
 
 ### Stable ABI (abi3)
 
-By default the wheel is tagged for the exact CPython that built it.
-With CMake >= 3.26 and Python >= 3.12, opt into a single abi3 wheel that serves
-every CPython >= 3.12 on the machine by passing both flags together
-(the CMake option makes nanobind build the limited-API module;
-the scikit-build-core setting sets the wheel tag, and the two must agree):
+By default the wheel targets the CPython version that built it.
+With CMake >= 3.26 and CPython >= 3.12, pass both flags below to build an abi3 wheel.
+`AXOM_PYTHON_STABLE_ABI` enables nanobind's limited-API module, and `wheel.py-api`
+sets the matching wheel tag:
 
 ```bash
 uv build --wheel \
@@ -191,38 +171,30 @@ uv build --wheel \
   src/python
 ```
 
-Below Python 3.12 nanobind silently builds a non-stable module,
-so only enable this on a 3.12+ interpreter. CMake's `FindPython` needs its
-`Development.SABIModule` component for this path, which is available starting in CMake 3.26.
-The build fails with an explicit message if either prerequisite is missing,
-rather than quietly producing a mislabelled wheel.
-Stable ABI relaxes the Python-version coupling, not the toolchain coupling:
-an abi3 wheel is still specific to the host-config it was built against.
-Free-threaded (`abi3t`) wheels are not built today; scikit-build-core 1.0+
-can emit those tags once the bindings and Conduit run under a free-threaded interpreter.
+The build requires CMake's `Development.SABIModule` component for this option
+and reports an error if it is unavailable. Use a CPython 3.12+ interpreter.
+The abi3 module can run on later compatible CPython versions, but still requires
+the Axom install and toolchain it was built against, plus a compatible Conduit
+Python module. This project does not build free-threaded `abi3t` wheels.
 
-`wheel.py-api` is deliberately not set in `pyproject.toml` since it would tag
-every wheel as `cp312`, including non-stable builds on Python < 3.12.
+`wheel.py-api` is unset in `pyproject.toml` so ordinary builds retain their
+CPython version tag.
 
 ### Source distributions (sdist)
 
-An sdist of this project is not self-contained, and standalone-sdist/PyPI distribution is
-out of scope. The binding translation unit lives with its component
-(`src/axom/sidre/nanobind_sidre.cpp`), outside this project directory, and scikit-build-core
-restricts sdist contents to the project root.
-The version is also read from `src/cmake/AxomVersion.cmake`, which would not work for sdist.
-The supported build paths therefore compile from a full repository checkout
-(`pip install ./src/python`, `uv build src/python`).
-If/when this changes, we will need to vendor the translation unit into this tree
-in a pre-sdist step, or move the project root above it.
+Build from a full repository checkout with `pip install ./src/python` or
+`uv build --wheel src/python`. An sdist omits the binding source at
+`src/axom/sidre/nanobind_sidre.cpp` and the version file at
+`src/cmake/AxomVersion.cmake`, both outside this project's root.
+It cannot build on its own.
 
 ### Package metadata and extras
 
-Wheel metadata is static, but whether the underlying Axom is an MPI build is a build-time choice,
-so the wheel cannot force MPI dependencies at install time.
-The `mpi` extra declares `mpi4py`, and the `test` extra declares `pytest`.
-Runtime dependencies intentionally stay minimal: `numpy` is required,
-while Conduit's Python module is exposed by the generated `axom-conduit.pth` file.
-The GitHub wheel test lane builds against an explicitly passed prebuilt Axom
-install, passes the matching host-config through `cmake.args=-C`, and selects
-the `mpi` extra automatically when that host-config reports `ENABLE_MPI=ON`.
+The `mpi` extra installs `mpi4py`, and the `test` extra installs `pytest`.
+The package metadata does not select extras based on Axom's build options,
+so users of an MPI build must request `mpi` when needed. NumPy is a required
+dependency. The generated `axom-conduit.pth` exposes Conduit's Python module.
+
+The GitHub wheel job builds against a prebuilt Axom install and passes its
+host-config through `cmake.args=-C`. It selects the `mpi` extra when the installed
+`axom-config.cmake` reports `AXOM_USE_MPI=ON`.

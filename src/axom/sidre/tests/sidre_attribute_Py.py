@@ -949,38 +949,33 @@ def test_save_load_group_with_attributes_same_ds():
 
 
 # ---------------------------------------------------------------------------
-# Scalar setters require an exact python int or float
+# Scalar setters reject implicit NumPy conversions
 # ---------------------------------------------------------------------------
-# The int and float overloads of the scalar setters are bound with nb::arg("value").noconvert(),
-# so nanobind skips its converting overload pass, so numpy floats don't silently get bound
-# to the int and truncated. As a consequence, numpy scalars must be converted by the caller,
-# e.g. float(x) or x.item().
+# .noconvert() prevents NumPy floats from selecting the int overload and losing
+# their fractional part. Callers must convert NumPy scalars explicitly.
 def test_setAttributeScalar_requires_exact_python_scalar_types():
     ds = sidre.DataStore()
     ds.createAttributeScalar(g_name_dump, g_dump_no)
     view = ds.getRoot().createViewScalar("scalar", 0)
 
-    # Exact python types are accepted.
     assert view.setAttributeScalar(g_name_dump, 1)
     assert view.getAttributeScalarInt(g_name_dump) == 1
 
-    # numpy scalars, 0-d arrays, bool and str are rejected rather than converted.
+    # Reject NumPy scalars, zero-dimensional arrays, bool, and str.
     for rejected in (np.int32(1), np.int64(1), np.float32(1.0), np.float64(1.0), np.array(1), True,
                      "1"):
         with pytest.raises(TypeError):
             view.setAttributeScalar(g_name_dump, rejected)
 
-    # The value is unchanged by the rejected calls.
+    # Rejected calls must leave the value unchanged.
     assert view.getAttributeScalarInt(g_name_dump) == 1
 
-    # The documented conversion at the call site works.
     assert view.setAttributeScalar(g_name_dump, int(np.int64(7)))
     assert view.getAttributeScalarInt(g_name_dump) == 7
 
 
 def test_noconvert_prevents_silent_float_to_int_truncation():
-    # This is what the noconvert annotations buy. With conversion enabled,
-    # np.float32(3.5) binds to the int overload and stores 3.
+    # If conversions were allowed, np.float32(3.5) would bind to the int overload and store 3
     ds = sidre.DataStore()
     ds.createAttributeScalar(g_name_size, g_size_small)
     view = ds.getRoot().createViewScalar("scalar", 0)
@@ -994,8 +989,6 @@ def test_noconvert_prevents_silent_float_to_int_truncation():
 
 
 def test_setScalar_requires_exact_python_scalar_types():
-    # The same contract on View.setScalar, which has carried noconvert since
-    # before the attribute setters did.
     ds = sidre.DataStore()
     view = ds.getRoot().createViewScalar("scalar", 0)
 

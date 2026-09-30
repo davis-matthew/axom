@@ -4,10 +4,7 @@
 #
 # SPDX-License-Identifier: (BSD-3-Clause)
 #------------------------------------------------------------------------------
-# Thin, binding-only build of Axom's Python extension module(s).
-#
-# This project compiles Axom's Python bindings against an installed Axom.
-# It does not build Axom or its third-party libraries.
+# Compile Axom's Python bindings against an installed Axom and its third-party libraries.
 #------------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.21)
@@ -45,9 +42,8 @@ if(AXOM_PYTHON_STABLE_ABI AND NOT Python_Development.SABIModule_FOUND)
             "or leave AXOM_PYTHON_STABLE_ABI off.")
 endif()
 
-# Under pip/uv the build backend runs from the current CMake directory rather than 
-# the user's shell, so a relative path might not be resolved the way the user meant it.
-# Reject it clearly rather than letting find_package fail with a generic message.
+# pip/uv builds may run outside the shell's working directory.
+# Require absolute paths so find_package resolves the intended Axom install.
 foreach(_axom_py_dir_var AXOM_DIR axom_DIR)
     if(DEFINED ${_axom_py_dir_var} AND NOT IS_ABSOLUTE "${${_axom_py_dir_var}}")
         message(FATAL_ERROR
@@ -57,9 +53,8 @@ foreach(_axom_py_dir_var AXOM_DIR axom_DIR)
     endif()
 endforeach()
 
-# AXOM_DIR follows Axom's convention: the Axom install prefix, whose lib/cmake
-# contains axom-config.cmake. A directory that directly contains axom-config.cmake
-# is also accepted. CMake's own package variable (axom_DIR) takes precedence when set.
+# AXOM_DIR accepts the install prefix or the directory containing axom-config.cmake.
+# CMake's axom_DIR takes precedence when set.
 if(DEFINED AXOM_DIR AND NOT DEFINED axom_DIR)
     if(EXISTS "${AXOM_DIR}/lib/cmake/axom-config.cmake")
         set(_axom_py_package_dir "${AXOM_DIR}/lib/cmake")
@@ -103,21 +98,16 @@ if(NOT _axom_py_conduit_cmake_dir AND AXOM_CONDUIT_DIR)
     set(_axom_py_conduit_cmake_dir "${AXOM_CONDUIT_DIR}/lib/cmake/conduit")
 endif()
 
-# Conduit's Python package directory -- needs to be absolute
-#
-# NOTE: Renamed from CONDUIT_PYTHON_MODULE_DIR to avoid collision:
-# find_package(axom) pulls in ConduitConfig.cmake, which sets
-# CONDUIT_PYTHON_MODULE_DIR with plain set() and would overwrite
-# any value the user passed. AXOM_PYTHON_CONDUIT_MODULE_DIR is
-# distinct and not shadowed by Conduit's config.
+# Use a separate override because ConduitConfig.cmake sets CONDUIT_PYTHON_MODULE_DIR
+# as a normal variable, shadowing caller-supplied cache values.
 set(AXOM_PYTHON_CONDUIT_MODULE_DIR "" CACHE PATH
     "Directory holding the same-build conduit Python package; overrides the value recorded by the Axom install")
 
-if(AXOM_PYTHON_CONDUIT_MODULE_DIR)       # use explicit override, if provided
+if(AXOM_PYTHON_CONDUIT_MODULE_DIR)
     set(_axom_py_conduit_python_module_dir "${AXOM_PYTHON_CONDUIT_MODULE_DIR}")
-elseif(AXOM_CONDUIT_PYTHON_MODULE_DIR)   # else, use value from Axom's export
+elseif(AXOM_CONDUIT_PYTHON_MODULE_DIR)
     set(_axom_py_conduit_python_module_dir "${AXOM_CONDUIT_PYTHON_MODULE_DIR}")
-else()                                   # and fallback to conduit's path
+else()
     set(_axom_py_conduit_python_module_dir "${CONDUIT_PYTHON_MODULE_DIR}")
 endif()
 
@@ -154,7 +144,7 @@ if(DEFINED SKBUILD_PROJECT_VERSION AND DEFINED AXOM_VERSION_MAJOR)
 endif()
 
 #------------------------------------------------------------------------------
-# Binding sources. The translation unit lives with its component, not in this project directory.
+# Compile the binding source from the Sidre component.
 #------------------------------------------------------------------------------
 set(_sidre_binding_sources
     "${CMAKE_CURRENT_SOURCE_DIR}/../axom/sidre/nanobind_sidre.cpp")
@@ -172,7 +162,7 @@ target_link_libraries(_sidre PRIVATE axom::sidre conduit::conduit_python)
 set_target_properties(_sidre PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 #------------------------------------------------------------------------------
-# Generated runtime/development helpers tied to the Axom/Conduit install.
+# Generate configuration helpers for this Axom and Conduit install.
 #------------------------------------------------------------------------------
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/axom-python-host-config.cmake.in"
                "${CMAKE_CURRENT_BINARY_DIR}/axom-python-host-config.cmake"
@@ -184,7 +174,7 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/axom-python-host-config.cmake"
               "${CMAKE_CURRENT_BINARY_DIR}/axom-python-env.sh"
         DESTINATION axom/share)
 
-# Prefixed with 'axom-' so it cannot collide with a conduit.pth shipped by any other distribution.
+# Prefix the filename to avoid replacing another package's conduit.pth.
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/axom-conduit.pth.in"
                "${CMAKE_CURRENT_BINARY_DIR}/axom-conduit.pth"
                @ONLY)
@@ -192,13 +182,12 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/axom-conduit.pth"
         DESTINATION ".")
 
 #------------------------------------------------------------------------------
-# TODO:
-#   - Check that we can generate local bindings for HIP/CUDA
+# TODO: Test wheel builds with HIP and CUDA.
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
-# nanobind_add_stub imports the module ('import _sidre') to introspect it.
-# Turn this off on hosts where the build-time import is problematic:
+# nanobind_add_stub imports _sidre to generate its type stub.
+# Disable it if the build host cannot import the module:
 #   -C cmake.define.AXOM_PYTHON_GENERATE_STUB=OFF
 #------------------------------------------------------------------------------
 option(AXOM_PYTHON_GENERATE_STUB

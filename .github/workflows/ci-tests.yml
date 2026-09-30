@@ -121,14 +121,12 @@ jobs:
           BUILD_TYPE=${{ matrix.build_type }} \
           ./scripts/github-actions/linux-build_and_test.sh
       - name: Build and test the Python wheel - ${{ matrix.build_type }} - ${{ matrix.config.job_name }}
-        # Builds Python wheel (src/python) against the Axom that the step above just installed; one build type is enough.
+        # Build against the Axom installed by the preceding step.
         if: matrix.config.do_wheel == 'yes' && matrix.build_type == 'Release'
         shell: bash
         timeout-minutes: 40
         run: |
-          # Find the installation path
           AXOM_INSTALL=$(awk -F= '/^CMAKE_INSTALL_PREFIX:PATH=/{print $2}' builddir/CMakeCache.txt)
-          # Run the wheels test
           HOST_CONFIG=host-configs/docker/${{ matrix.config.host_config }} \
           AXOM_INSTALL="${AXOM_INSTALL}" \
           ./scripts/github-actions/linux-wheel_and_test.sh

@@ -892,13 +892,10 @@ def test_concurrent_datastores_registry_isolation():
 
 
 # ---------------------------------------------------------------------------
-# External views onto sidre-owned storage must not pin their own DataStore
+# External views into Sidre-owned storage must not pin their own DataStore
 # ---------------------------------------------------------------------------
-# The binding pins the numpy owner of an external view so a dropped temporary
-# cannot leave sidre holding a dangling pointer. Storage that sidre already owns
-# must be exempt: pinning it forms a cycle the registry cannot break (pin -> array
-# -> sidre wrapper -> DataStore python object, whose collection is what releases
-# the pin), retaining the DataStore, Group, View and Buffer for the life of the process.
+# Pinning an array from the DataStore's own Buffer keeps its Python wrappers alive.
+# That prevents DataStore collection, which would release the pin.
 def test_opaque_view_onto_sidre_storage_does_not_retain_datastore():
     ds = sidre.DataStore()
     root = ds.getRoot()
@@ -930,8 +927,7 @@ def test_described_external_view_onto_sidre_storage_does_not_retain_datastore():
 
 
 def test_external_view_onto_sidre_storage_still_reads_correctly():
-    # The exemption removes the pin, not the aliasing:
-    # the view must still read the buffer it points into.
+    # The alias must read the Buffer's data after the Python array is collected.
     ds = sidre.DataStore()
     root = ds.getRoot()
     field = root.createViewAndAllocate("field", sidre.TypeID.FLOAT64_ID, 8)
@@ -946,9 +942,6 @@ def test_external_view_onto_sidre_storage_still_reads_correctly():
     assert view.getDataArray()[7] == 8.0
 
 
-# The exemption lives in one place (pinExternalDataOwner), so every entry point
-# that pins inherits it. Cover the two that createView does not reach, and the
-# boundary the exemption must not cross.
 def test_set_external_data_onto_sidre_storage_does_not_retain_datastore():
     ds = sidre.DataStore()
     root = ds.getRoot()
@@ -972,8 +965,7 @@ def test_copied_view_onto_sidre_storage_does_not_retain_datastore():
     data = field.getBuffer().getDataArray()
     source = root.createView("aliased", sidre.TypeID.FLOAT64_ID, 8, data)
 
-    # copyView re-pins the destination from the source's pin; an exempt source has
-    # no pin to copy, so the destination must not acquire one either.
+    # The source has no pin, so copyView must not add one.
     root.createGroup("copy_target").copyView(source)
 
     ref = weakref.ref(ds)
@@ -984,9 +976,7 @@ def test_copied_view_onto_sidre_storage_does_not_retain_datastore():
 
 
 def test_external_view_onto_another_datastores_storage_is_still_pinned():
-    # The exemption is per-DataStore: a view in the `consumer` DataStore pointing at storage
-    # owned by the  `donor` DataStore is not exempt and must still be pinned.
-    # The observable consequence is that the pin keeps the donor alive.
+    # A view in another DataStore must keep the donor alive.
     donor = sidre.DataStore()
     donor_field = donor.getRoot().createViewAndAllocate("field", sidre.TypeID.FLOAT64_ID, 8)
     data = donor_field.getBuffer().getDataArray()
@@ -1003,8 +993,7 @@ def test_external_view_onto_another_datastores_storage_is_still_pinned():
     assert view.getDataArray()[0] == 1.0
     assert view.getDataArray()[7] == 8.0
 
-    # Pinning across DataStores must not make the *consumer* immortal:
-    # its pin references the donor, not itself, so collecting it releases the donor too.
+    # Collecting the consumer must release its pin and allow donor collection.
     consumer_ref = weakref.ref(consumer)
     del view, consumer
     _force_gc()
@@ -1014,21 +1003,17 @@ def test_external_view_onto_another_datastores_storage_is_still_pinned():
 
 
 # ---------------------------------------------------------------------------
-# Aliasing an already-pinned external view must not pin a sidre wrapper
+# Aliases of pinned external views must not pin a Sidre wrapper
 # ---------------------------------------------------------------------------
-# Storage behind an external view is owned by Python, not sidre, so a view onto
-# it does need a pin -- but the array handed in may be
-# `external_view.getDataArray()`, which is owned by that View's python wrapper.
-# Pinning that array recreates the cycle the buffer exemption avoids
-# (pin -> array -> View wrapper -> DataStore python object, whose collection is
-# what releases the pin). The pin must be redirected to the original numpy owner.
+# An external View's getDataArray() keeps the View wrapper alive. An alias must
+# pin the original NumPy owner to retain the data without retaining the DataStore.
 def test_view_aliasing_a_pinned_external_view_does_not_retain_datastore():
     ds = sidre.DataStore()
     root = ds.getRoot()
     source_data = np.arange(8, dtype=np.float64) + 1.0
     external = root.createView("external", sidre.TypeID.FLOAT64_ID, 8, source_data)
 
-    # Owned by `external`'s python wrapper, not by source_data.
+    # This array keeps the external View's Python wrapper alive.
     aliased_data = external.getDataArray()
     root.createView("aliased", sidre.TypeID.FLOAT64_ID, 8, aliased_data)
 
@@ -1040,11 +1025,7 @@ def test_view_aliasing_a_pinned_external_view_does_not_retain_datastore():
 
 
 def test_view_aliasing_a_pinned_external_view_still_pins_the_numpy_owner():
-    # The redirect must not drop the pin. Destroy the source view so *its* pin is
-    # gone, leaving the aliasing view's redirected pin as the only thing keeping
-    # the numpy storage alive. A fix that simply skipped the pin (the way the
-    # sidre-owned case does) would let the array be collected here and leave the
-    # aliasing view pointing at freed memory.
+    # Destroy the source View so only the alias's pin keeps the NumPy data alive.
     ds = sidre.DataStore()
     root = ds.getRoot()
     source_data = np.arange(8, dtype=np.float64) + 1.0
@@ -1062,18 +1043,13 @@ def test_view_aliasing_a_pinned_external_view_still_pins_the_numpy_owner():
     assert aliased.getDataArray()[0] == 1.0
     assert aliased.getDataArray()[7] == 8.0
 
-    # Drop everything before returning: leaving a live DataStore (and its pin)
-    # in this frame perturbs later tests in this module, which assert on
-    # collection of their own DataStores.
+    # Release this DataStore's pin before later tests check collection.
     del aliased, root, ds
     _force_gc()
 
 
 def test_setExternalData_aliasing_a_pinned_external_view_does_not_retain_datastore():
-    # Same redirect, reached through setExternalData rather than createView.
-    # Structured like the createView case above so it discriminates the redirect
-    # from a fix that merely skips the pin: the source view is destroyed, so the
-    # redirected pin is the only remaining reference to the numpy storage.
+    # Check that setExternalData retains the NumPy owner after the source View is destroyed.
     ds = sidre.DataStore()
     root = ds.getRoot()
     source_data = np.arange(8, dtype=np.float64) + 1.0

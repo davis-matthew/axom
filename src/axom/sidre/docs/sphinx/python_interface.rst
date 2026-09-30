@@ -89,44 +89,41 @@ After ``spack install``, the environment's interpreter should have a working Axo
 pip / uv wheel (thin, external Axom)
 ------------------------------------
 
-The wheel compiles only the Sidre binding against an already-installed Axom.
-It is tied to that Axom install, its Conduit install, and its host-config;
-it is not a portable PyPI-style wheel.
+The wheel compiles the Sidre binding against an installed Axom. It is tied to
+that Axom's install, its Conduit install, and the host-config used to build them.
 
 .. note::
-   **Do not install Conduit from PyPI.** ``axom.sidre`` must use the same
-   ``libconduit`` that Axom was built against. The PyPI packages named
-   ``conduit`` and ``llnl-conduit`` do not provide that same build.
-
    Use the Conduit Python package from the Conduit install recorded by Axom.
-   Wheels built by Axom's Python project record that path in ``axom-conduit.pth``.
+   ``axom.sidre`` must use the ``libconduit`` that Axom links. The PyPI packages
+   named ``conduit`` and ``llnl-conduit`` do not provide that build.
+   The wheel records the package path in ``axom-conduit.pth``.
 
 Quick start
 ^^^^^^^^^^^
 
-Use an absolute ``AXOM_DIR`` pointing at the Axom install prefix
-(the directory whose ``lib/cmake`` holds ``axom-config.cmake``).
+Set ``AXOM_INSTALL`` to the absolute Axom install prefix, whose ``lib/cmake``
+contains ``axom-config.cmake``, and pass it as ``AXOM_DIR``:
 
 .. code-block:: bash
 
-   $ uv venv --python $(which python3)
+   $ export AXOM_INSTALL=/absolute/path/to/axom/install
+   $ uv venv --python "$(command -v python3)"
 
    $ uv pip install /path/to/axom/src/python \
        -C cmake.define.AXOM_DIR="$AXOM_INSTALL"
 
-   $ uv run [--no-project] python -c "import axom.sidre, conduit, numpy; print(axom.__version__)"
+   $ uv run --no-project python -c "import axom.sidre, conduit, numpy; print(axom.__version__)"
 
 .. note::
-   You might need to pass  ``--no-project`` to ``uv run`` in these commands 
-   (or activate the venv with ``source .venv/bin/activate`` and run ``python`` directly).
-   Without it, ``uv run`` looks for a ``pyproject.toml`` in the current directory
-   and its parents, and rebuilds/installs that project before running.
-   Inside ``src/python`` that project is the Axom wheel itself, rebuilt without ``AXOM_DIR``.
-   ``--no-sync`` skips the rebuild but runs that project's own ``.venv``,
-   which might differ from the venv created above.
+   These examples use ``--no-project`` to keep ``uv run`` from installing a
+   project it finds in the current directory or its parents.
+   Inside ``src/python``, that could rebuild the Axom wheel without ``AXOM_DIR``.
+   ``--no-sync`` still selects the project's environment, which may differ
+   from the venv above. You can also activate the venv with
+   ``source .venv/bin/activate`` and run ``python`` directly.
 
-Optional dependencies use the normal Python extras syntax on the local source
-path. Keep the same CMake ``-C`` options used for the Axom install:
+To install optional dependencies, add extras to the source path and keep
+the CMake ``-C`` options used to build the wheel:
 
 .. code-block:: bash
 
@@ -138,29 +135,27 @@ path. Keep the same CMake ``-C`` options used for the Axom install:
 
 Use ``[mpi]`` for ``mpi4py`` support, ``[test]`` for ``pytest``,
 or combine extras as ``'/path/to/axom/src/python[mpi,test]'``.
-If the Axom wheel is already installed and you only need the optional dependency package,
-installing ``mpi4py`` or ``pytest`` directly is also fine.
+If the wheel is already installed, you can install ``mpi4py`` or ``pytest`` directly.
 
 If ``axom.sidre`` is already installed in a venv but ``import conduit`` fails,
-add the same-build Conduit Python package with one ``.pth`` file.
-An Axom install records this path as ``AXOM_CONDUIT_PYTHON_MODULE_DIR`` in ``axom-config.cmake``:
+check ``axom-conduit.pth`` in the venv. If it is missing, create it with the
+``AXOM_CONDUIT_PYTHON_MODULE_DIR`` path recorded in ``axom-config.cmake``:
 
 .. code-block:: bash
 
    $ CONDUIT_PY_DIR=/path/to/conduit/install/python-modules
    $ printf '%s\n' "$CONDUIT_PY_DIR" > \
-       "$(uv run [--no-project] python -c 'import sysconfig; print(sysconfig.get_paths()["platlib"])')/axom-conduit.pth"
-   $ uv run [--no-project] python -c "import axom.sidre, conduit; print(conduit.__file__)"
+       "$(uv run --no-project python -c 'import sysconfig; print(sysconfig.get_paths()["platlib"])')/axom-conduit.pth"
+   $ uv run --no-project python -c "import axom.sidre, conduit; print(conduit.__file__)"
 
 If your site publishes a host-config-specific wheelhouse, install from the path
 they provide with ``uv pip install axom --find-links <wheelhouse>``.
-Axom does not assume a central wheelhouse.
 
 The installed wheel also contains a CMake host-config for downstream projects:
 
 .. code-block:: bash
 
-   $ cmake -C "$(uv run [--no-project] axom-python-config --host-config)" -S /path/to/project -B build
+   $ cmake -C "$(uv run --no-project axom-python-config --host-config)" -S /path/to/project -B build
 
 For build details, including MPI compiler wrappers, editable installs,
 and stable ABI wheels, see ``src/python/README.md``.
@@ -168,29 +163,26 @@ and stable ABI wheels, see ``src/python/README.md``.
 Using Axom in Jupyter
 ^^^^^^^^^^^^^^^^^^^^^
 
-Because the wheel and the Conduit ``.pth`` live in the venv's ``site-packages``,
-a Jupyter kernel running in that venv imports ``axom.sidre`` natively -- there is
-nothing extra to configure, and no need to modify ``PYTHONPATH``.
-Add Jupyter to the same venv and register it as a kernel:
+Install Jupyter in the same venv as the wheel and register it as a kernel.
+That kernel uses the wheel and ``axom-conduit.pth`` in the venv's ``site-packages``:
 
 .. code-block:: bash
 
    $ uv pip install jupyterlab ipykernel
-   $ uv run [--no-project] python -m ipykernel install --user --name axom --display-name "Axom (uv)"
-   $ uv run [--no-project] jupyter lab
+   $ uv run --no-project python -m ipykernel install --user --name axom --display-name "Axom (uv)"
+   $ uv run --no-project jupyter lab
 
-For more IDE-like completions, signature help, and hover documentation in JupyterLab,
+For code completion, signature help, and hover documentation in JupyterLab,
 install the language-server packages in the same venv:
 
 .. code-block:: bash
 
    $ uv pip install jupyterlab-lsp 'python-lsp-server[all]'
 
-The Axom wheel installs PEP 561 type information and generated ``.pyi`` stubs for ``axom.sidre``.
-JupyterLab's LSP extension can use those stubs for richer completion and overload help
-than the classic notebook frontend usually shows.
+The wheel includes a PEP 561 marker and, by default, generated ``.pyi`` stubs for ``axom.sidre``.
+JupyterLab's LSP extension can read those stubs for type and overload information.
 
-Select the **Axom (uv)** kernel, then for example:
+Select the Axom (uv) kernel and run:
 
 .. code-block:: python
 
@@ -205,26 +197,24 @@ Select the **Axom (uv)** kernel, then for example:
 
 .. warning::
 
-   Sidre currently preserves the C++ API's no-op semantics for some invalid operations.
-   For example, ``grp.createGroup("foo")`` followed by another ``grp.createGroup("foo")``
-   returns ``None`` for the second call unless ``accept_existing=True`` is passed.
-   The related SLIC diagnostic may be written to the process stderr/log stream
-   instead of appearing as a notebook cell error, so notebook code should either check for ``None``
-   or use the explicit ``accept_existing`` option when reusing a group is intended.
+   Calling ``grp.createGroup("foo")`` twice returns ``None`` on the second call
+   unless you pass ``accept_existing=True``. The SLIC diagnostic may go to stderr
+   or a log instead of appearing as a notebook cell error.
+   Check for ``None``, or pass ``accept_existing=True`` to reuse the group.
 
-If the kernel cannot import ``axom.sidre``, it is nearly always either the wrong kernel
-(one outside the venv) or a missing Conduit ``.pth``. Check both from inside the notebook:
+If the kernel cannot import ``axom.sidre``, check that it uses
+the venv's Python and can find the Conduit package:
 
 .. code-block:: python
 
-   import sys; print(sys.executable)          # expect <venv>/bin/python
-   import conduit; print(conduit.__file__)    # expect $CONDUIT_INSTALL/lib/pythonX.Y/site-packages/...
+   import sys
+   print(sys.executable)    # Expect <venv>/bin/python
+   import conduit
+   print(conduit.__file__)  # Expect the Conduit install recorded by Axom
 
-If the underlying Axom is an MPI build and you need to pass a communicator to
-``IOManager`` (or to initialize MPI), install the ``mpi`` extra.
-For a local source install, use ``uv pip install '/path/to/axom/src/python[mpi]' -C ...``
-as shown above; for a prebuilt wheel from a wheelhouse,
-use ``uv pip install 'axom[mpi]' --find-links <wheelhouse>``.
+For an MPI build, install the ``mpi`` extra to initialize MPI or pass a
+communicator to ``IOManager``. Use the local source command above,
+or ``uv pip install 'axom[mpi]' --find-links <wheelhouse>`` for a prebuilt wheel.
 
 ====================================
 Working with Conduit and NumPy

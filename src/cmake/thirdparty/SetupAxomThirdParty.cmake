@@ -136,8 +136,8 @@ if (CONDUIT_DIR)
 
     blt_convert_to_system_includes(TARGET conduit::conduit)
 
-    # Resolve CONDUIT_PYTHON_MODULE_DIR to an absolute path
-    # Preserve user-supplied cache values if present over the one from conduit's install
+    # Prefer the user's cached Python module path over Conduit's default,
+    # then resolve it relative to the Conduit install if needed.
     get_property(_axom_conduit_py_dir_cache
                  CACHE CONDUIT_PYTHON_MODULE_DIR PROPERTY VALUE)
     if(_axom_conduit_py_dir_cache)
