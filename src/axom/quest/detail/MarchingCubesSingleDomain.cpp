@@ -8,20 +8,14 @@
 
 // Implementation requires Conduit.
 #ifndef AXOM_USE_CONDUIT
-  #error "MarchingCubes.cpp requires conduit"
+  #error "MarchingCubesSingleDomain.cpp requires conduit"
 #endif
 #include "conduit_blueprint.hpp"
 
 #include "axom/quest/detail/MarchingCubesSingleDomain.hpp"
 #include "axom/fmt.hpp"
 
-namespace axom
-{
-namespace quest
-{
-namespace detail
-{
-namespace marching_cubes
+namespace axom::quest::detail::marching_cubes
 {
 MarchingCubesSingleDomain::MarchingCubesSingleDomain(MarchingCubes& mc)
   : m_mc(mc)
@@ -102,10 +96,6 @@ void MarchingCubesSingleDomain::setDomain(const conduit::Node& dom,
   m_impl->setDataParallelism(m_dataParallelism);
 }
 
-/*!
-  @brief Allocate a MarchingCubesImpl object, template-specialized
-  for caller-specified runtime policy and physical dimension.
-*/
 std::unique_ptr<MarchingCubesSingleDomain::ImplBase> MarchingCubesSingleDomain::newMarchingCubesImpl()
 {
   SLIC_ASSERT(m_ndim >= 2 && m_ndim <= 3);
@@ -152,7 +142,4 @@ int32_t MarchingCubesSingleDomain::getDomainId(int32_t defaultId) const
   return rval;
 }
 
-}  // namespace marching_cubes
-}  // namespace detail
-}  // end namespace quest
-}  // end namespace axom
+}  // end namespace axom::quest::detail::marching_cubes
