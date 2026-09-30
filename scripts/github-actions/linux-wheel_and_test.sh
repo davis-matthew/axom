@@ -101,15 +101,15 @@ fi
 echo "AXOM_WHEEL_ENABLE_MPI=${AXOM_WHEEL_ENABLE_MPI}"
 
 echo "~~~~~~ ENSURE uv IS AVAILABLE ~~~~~~"
+# Use a uv already on PATH (e.g. a developer machine); otherwise bootstrap a pinned one.
+# `pip install --target` writes to a private directory rather than into the interpreter's
+# environment, so it does not needs --user or --break-system-packages 
+# on PEP 668 (EXTERNALLY-MANAGED) distro Pythons such as Ubuntu 24.04's.
+AXOM_UV_VERSION="${AXOM_UV_VERSION:-0.12.21}"
 if ! command -v uv >/dev/null 2>&1; then
-    # Distro Pythons (e.g. Ubuntu 24.04) ship a PEP 668 EXTERNALLY-MANAGED marker, which makes `pip install --user` fail.
-    # uv only lands in the user site directory so opting out is safe here.
-    pip_args="--user"
-    if python3 -c 'import os, sysconfig, sys; sys.exit(0 if os.path.exists(os.path.join(sysconfig.get_path("stdlib"), "EXTERNALLY-MANAGED")) else 1)'; then
-        pip_args="${pip_args} --break-system-packages"
-    fi
-    python3 -m pip install ${pip_args} uv
-    export PATH="${HOME}/.local/bin:${PATH}"
+    UV_BOOTSTRAP_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/axom-uv-${AXOM_UV_VERSION}"
+    python3 -m pip install --disable-pip-version-check --target "${UV_BOOTSTRAP_DIR}" "uv==${AXOM_UV_VERSION}"
+    export PATH="${UV_BOOTSTRAP_DIR}/bin:${PATH}"
 fi
 uv --version
 
