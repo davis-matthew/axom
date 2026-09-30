@@ -45,8 +45,23 @@ if(AXOM_PYTHON_STABLE_ABI AND NOT Python_Development.SABIModule_FOUND)
             "or leave AXOM_PYTHON_STABLE_ABI off.")
 endif()
 
+# AXOM_DIR follows Axom's convention: the Axom install prefix, whose lib/cmake
+# contains axom-config.cmake. A directory that directly contains axom-config.cmake
+# is also accepted. CMake's own package variable (axom_DIR) takes precedence when set.
 if(DEFINED AXOM_DIR AND NOT DEFINED axom_DIR)
-    set(axom_DIR "${AXOM_DIR}" CACHE PATH "Axom CMake package directory")
+    if(EXISTS "${AXOM_DIR}/lib/cmake/axom-config.cmake")
+        set(_axom_py_package_dir "${AXOM_DIR}/lib/cmake")
+    elseif(EXISTS "${AXOM_DIR}/axom-config.cmake")
+        set(_axom_py_package_dir "${AXOM_DIR}")
+    else()
+        message(FATAL_ERROR
+                "AXOM_DIR='${AXOM_DIR}' is not an Axom install: "
+                "neither '${AXOM_DIR}/lib/cmake/axom-config.cmake' "
+                "nor '${AXOM_DIR}/axom-config.cmake' exists. "
+                "Set AXOM_DIR to the Axom install prefix.")
+    endif()
+    set(axom_DIR "${_axom_py_package_dir}" CACHE PATH "Axom CMake package directory")
+    unset(_axom_py_package_dir)
 endif()
 
 find_package(axom CONFIG REQUIRED)
@@ -119,12 +134,10 @@ if(DEFINED SKBUILD_PROJECT_VERSION AND DEFINED AXOM_VERSION_MAJOR)
         "${AXOM_VERSION_MAJOR}.${AXOM_VERSION_MINOR}.${AXOM_VERSION_PATCH}")
     if(NOT SKBUILD_PROJECT_VERSION VERSION_EQUAL _axom_installed_version)
         message(FATAL_ERROR
-                "Axom version mismatch: the wheel's metadata version is "
-                "${SKBUILD_PROJECT_VERSION} (from src/cmake/AxomVersion.cmake in this "
-                "source tree) but the Axom install it would link against is "
-                "${_axom_installed_version} (AXOM_DIR=${axom_DIR}). Build the wheel from "
-                "the source tree that produced the install, or point AXOM_DIR at an "
-                "install built from this source tree.")
+                "Axom version mismatch: the wheel's metadata version is ${SKBUILD_PROJECT_VERSION} "
+                "but the Axom install it would link against is ${_axom_installed_version} (axom_DIR=${axom_DIR}). "
+                "Build the wheel from the source tree that produced the install, "
+                "or point AXOM_DIR at an install built from this source tree.")
     endif()
 endif()
 

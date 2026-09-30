@@ -104,15 +104,15 @@ it is not a portable PyPI-style wheel.
 Quick start
 ^^^^^^^^^^^
 
-Use an absolute ``AXOM_DIR`` pointing at the directory containing
-``axom-config.cmake``, usually ``$AXOM_INSTALL/lib/cmake``.
+Use an absolute ``AXOM_DIR`` pointing at the Axom install prefix
+(the directory whose ``lib/cmake`` holds ``axom-config.cmake``).
 
 .. code-block:: bash
 
    $ uv venv --python $(which python3)
 
    $ uv pip install /path/to/axom/src/python \
-       -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake"
+       -C cmake.define.AXOM_DIR="$AXOM_INSTALL"
 
    $ uv run python -c "import axom.sidre, conduit, numpy; print(axom.__version__)"
 
@@ -122,10 +122,10 @@ path. Keep the same CMake ``-C`` options used for the Axom install:
 .. code-block:: bash
 
    $ uv pip install '/path/to/axom/src/python[mpi]' \
-       -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake"
+       -C cmake.define.AXOM_DIR="$AXOM_INSTALL"
 
    $ uv pip install '/path/to/axom/src/python[test]' \
-       -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake"
+       -C cmake.define.AXOM_DIR="$AXOM_INSTALL"
 
 Use ``[mpi]`` for ``mpi4py`` support, ``[test]`` for ``pytest``,
 or combine extras as ``'/path/to/axom/src/python[mpi,test]'``.

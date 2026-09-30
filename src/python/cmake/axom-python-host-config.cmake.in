@@ -21,7 +21,7 @@ if(EXISTS "${_AXOM_PYTHON_PREFIX_DIR}/bin/python")
 endif()
 
 set(axom_DIR "@axom_DIR@" CACHE PATH "Axom CMake package directory")
-set(AXOM_DIR "@axom_DIR@" CACHE PATH "Axom CMake package directory")
+set(AXOM_DIR "@AXOM_INSTALL_PREFIX@" CACHE PATH "Axom install prefix")
 set(AXOM_INSTALL_PREFIX "@AXOM_INSTALL_PREFIX@" CACHE PATH "Axom install prefix")
 
 set(Conduit_DIR "@_axom_py_conduit_cmake_dir@" CACHE PATH "Conduit CMake package directory")

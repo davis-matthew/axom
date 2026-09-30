@@ -8,10 +8,10 @@
 #
 # This project compiles Axom's nanobind bindings against an already-installed Axom.
 # It does not build Axom or any of its third-party libraries.
-# Point it at an install with axom_DIR (NOT CMAKE_PREFIX_PATH, which scikit-build-core
+# Point it at an install prefix with AXOM_DIR (NOT CMAKE_PREFIX_PATH, which scikit-build-core
 # reserves for its own build environment -- see src/python/README.md):
 #
-#   pip install ./src/python -C cmake.define.axom_DIR=$AXOM_INSTALL/lib/cmake
+#   pip install ./src/python -C cmake.define.AXOM_DIR=$AXOM_INSTALL
 #
 # The pure-Python package tree it wraps lives beside this file under src/
 # and has the same tree layout as the CMake-based installation (see src/python/README.md).
@@ -49,14 +49,14 @@ classifiers = [
 ]
 # conduit is a hard runtime dependency for sidre that intentionally does NOT appear here:
 # the PyPI name 'conduit' is an unrelated project, and 'llnl-conduit' is a separate build of
-# Conduit that is unlikely to be ABI-compatible with the one Axom links 
+# Conduit that is unlikely to be ABI-compatible with the one Axom links
 # -- either way pip would put a second libconduit in the process (see src/python/README.md).
 # The conduit Python module must come from the same Conduit build Axom links, exposed via a .pth file.
 # Revisit if Conduit ever ships a thin, find_package-based binding wheel.
 dependencies = ["numpy>=1.22"]
 
 [project.optional-dependencies]
-# Wheel metadata is static, but MPI-ness is a build configuration: 
+# Wheel metadata is static, but MPI-ness is a build configuration:
 # a wheel built from a +mpi Axom cannot force this extra at install time.
 # The README and the import-error guidance tell users to `pip install 'axom[mpi]'` when needed.
 mpi = ["mpi4py>=3.1"]
@@ -87,14 +87,14 @@ result = "{major}.{minor}.{patch}"
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
-# The 'axom' regular package (its __init__.py files, py.typed and the checked-in package stub) ships as pure Python from src/axom. 
+# The 'axom' regular package (its __init__.py files, py.typed and the checked-in package stub) ships as pure Python from src/axom.
 # The compiled extension and its generated _sidre.pyi are installed by CMakeLists.txt into axom/sidre/.
 wheel.packages = ["src/axom"]
 
 # NOTE on the sdist: the binding translation unit lives with its component (../axom/sidre/nanobind_sidre.cpp), outside this project directory.
 # A `sdist.include = ["../axom/..."]` entry does NOT vendor it -- scikit-build-core restricts sdist contents to the project root
 # and silently drops out-of-tree paths (verified with scikit-build-core 1.0.3).
-# The resulting sdist is therefore not self-contained: the supported build paths 
+# The resulting sdist is therefore not self-contained: the supported build paths
 # compile from a full repo checkout (`pip install ./src/python`, `uv build src/python`),
 # where CMakeLists.txt reads the TU from its on-disk relative path.
 # Standalone-sdist / PyPI distribution is out of scope.

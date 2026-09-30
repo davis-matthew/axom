@@ -93,24 +93,23 @@ The wheel compiles Axom's Python binding against an existing Axom install.
 It is specific to that install and host-config; it is not repaired with `auditwheel`
 and is not intended for PyPI.
 
-Use an absolute `AXOM_DIR` pointing at the directory containing `axom-config.cmake`,
-normally `$AXOM_INSTALL/lib/cmake`:
+Use an absolute `AXOM_DIR` pointing at the Axom install prefix:
 
 ```bash
-uv build --wheel -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake" src/python
+uv build --wheel -C cmake.define.AXOM_DIR="$AXOM_INSTALL" src/python
 ```
 
-The underlying CMake package variable is `axom_DIR`.
-`AXOM_DIR` is accepted as an Axom-conventional alias.
-Do not use `CMAKE_PREFIX_PATH` for `uv build` or `uv pip install` since scikit-build-core
-uses it internally for the isolated build environment.
+The build resolves `AXOM_DIR` to `$AXOM_DIR/lib/cmake`, and also accepts a directory
+that holds `axom-config.cmake` directly. CMake's own package variable, `axom_DIR`,
+takes precedence when set. Do not use `CMAKE_PREFIX_PATH` for `uv build` or `uv pip install`
+since scikit-build-core uses it internally for the isolated build environment.
 
 Conduit and its Python package path are found through `axom-config.cmake` in the normal case.
 Add `Conduit_DIR` only if Axom's recorded Conduit package path no longer resolves:
 
 ```bash
 uv build --wheel \
-  -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake" \
+  -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   -C cmake.define.Conduit_DIR="$CONDUIT_INSTALL/lib/cmake/conduit" \
   src/python
 ```
@@ -120,7 +119,7 @@ missing or stale:
 
 ```bash
 uv build --wheel \
-  -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake" \
+  -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   -C cmake.define.AXOM_PYTHON_CONDUIT_MODULE_DIR="$CONDUIT_INSTALL/python-modules" \
   src/python
 ```
@@ -137,7 +136,7 @@ time:
 uv build --wheel \
   -C cmake.args=-C \
   -C cmake.args=/absolute/path/to/host-config.cmake \
-  -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake" \
+  -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   src/python
 ```
 
@@ -167,7 +166,7 @@ if it misbehaves, reinstall the editable wheel to force a rebuild:
 ```bash
 uv pip install nanobind 'scikit-build-core[pyproject]'
 uv pip install -e src/python --no-build-isolation \
-  -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake" \
+  -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   -C build-dir=build/py -C editable.rebuild=true
 (cd "$(mktemp -d)" && uv run --project "$OLDPWD" \
    pytest -o python_files='*_Py.py' "$OLDPWD/src/axom/sidre/tests/")
@@ -180,7 +179,7 @@ and several tests write output files into the current directory, so we run them 
 
 By default the wheel is tagged for the exact CPython that built it.
 With CMake >= 3.26 and Python >= 3.12, opt into a single abi3 wheel that serves
-every CPython >= 3.12 on the machine by passing both flags together 
+every CPython >= 3.12 on the machine by passing both flags together
 (the CMake option makes nanobind build the limited-API module;
 the scikit-build-core setting sets the wheel tag, and the two must agree):
 
@@ -188,11 +187,11 @@ the scikit-build-core setting sets the wheel tag, and the two must agree):
 uv build --wheel \
   -C cmake.define.AXOM_PYTHON_STABLE_ABI=ON \
   -C wheel.py-api=cp312 \
-  -C cmake.define.AXOM_DIR="$AXOM_INSTALL/lib/cmake" \
+  -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   src/python
 ```
 
-Below Python 3.12 nanobind silently builds a non-stable module, 
+Below Python 3.12 nanobind silently builds a non-stable module,
 so only enable this on a 3.12+ interpreter. CMake's `FindPython` needs its
 `Development.SABIModule` component for this path, which is available starting in CMake 3.26.
 The build fails with an explicit message if either prerequisite is missing,

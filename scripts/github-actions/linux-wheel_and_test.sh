@@ -11,7 +11,7 @@
 # without using the run_python_with_axom.sh wrapper or updating the PYTHONPATH:
 #
 #   1. build the wheel from src/python against the prebuilt Axom install
-#      specified by AXOM_DIR or AXOM_INSTALL (find_package(axom));
+#      whose prefix is given by AXOM_DIR or AXOM_INSTALL (find_package(axom));
 #   2. install the wheel into a fresh uv venv;
 #   3. verify the wheel installed conduit.pth for the same-build Conduit python module;
 #   4. run the Sidre Python test suite with plain pytest.
@@ -70,14 +70,12 @@ cmake_bool_from_file_is_on() {
     [[ "${value}" == "ON" || "${value}" == "TRUE" || "${value}" == "YES" || "${value}" == "1" ]]
 }
 
-if [[ -n "${AXOM_INSTALL:-}" && -z "${AXOM_DIR:-}" ]]; then
-    AXOM_DIR="${AXOM_INSTALL%/}/lib/cmake"
-fi
-
-if [[ -z "${AXOM_DIR:-}" || ! -f "${AXOM_DIR}/axom-config.cmake" ]]; then
-    echo "ERROR: Axom CMake package not found." >&2
-    echo "       Set AXOM_DIR to the directory containing axom-config.cmake," >&2
-    echo "       or set AXOM_INSTALL to an Axom install prefix." >&2
+# AXOM_DIR is the Axom install prefix
+AXOM_DIR="${AXOM_DIR:-${AXOM_INSTALL:-}}"
+if [[ -z "${AXOM_DIR}" || ! -f "${AXOM_DIR%/}/lib/cmake/axom-config.cmake" ]]; then
+    echo "ERROR: Axom install not found." >&2
+    echo "       Set AXOM_DIR (or AXOM_INSTALL) to an Axom install prefix," >&2
+    echo "       i.e. the directory whose lib/cmake holds axom-config.cmake." >&2
     exit 1
 fi
 AXOM_DIR=$(absolute_path "${AXOM_DIR}")
