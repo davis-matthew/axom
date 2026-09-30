@@ -289,7 +289,11 @@ public:
    */
   AXOM_HOST_DEVICE int addVertex(const PointType& pt)
   {
+#if !(defined(__gfx90a__) && HIP_VERSION_MAJOR < 7)
+    // Skip assert in gfx90a (MI250X) device code with hip@6.4.3 due to an apparent compiler bug
     SLIC_ASSERT(m_num_vertices + 1 < MAX_VERTS);
+#endif
+
     m_vertices[m_num_vertices] = pt;
     m_num_vertices++;
     return m_num_vertices - 1;
