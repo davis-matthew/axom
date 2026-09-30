@@ -65,6 +65,12 @@ elseif(CMAKE_CXX_STANDARD LESS AXOM_CXX_STANDARD)
             "but the Axom install at '${axom_DIR}' was built with C++${AXOM_CXX_STANDARD}.")
 endif()
 
+# Match how BLT compiles Axom
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT DEFINED CMAKE_CXX_EXTENSIONS)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+endif()
+
 set(_axom_py_conduit_cmake_dir "${Conduit_DIR}")
 if(NOT _axom_py_conduit_cmake_dir AND AXOM_CONDUIT_DIR)
     set(_axom_py_conduit_cmake_dir "${AXOM_CONDUIT_DIR}/lib/cmake/conduit")
@@ -160,7 +166,7 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/conduit.pth"
         DESTINATION ".")
 
 #------------------------------------------------------------------------------
-# TODO: 
+# TODO:
 #   - Check that we can generate local bindings for HIP/CUDA
 #------------------------------------------------------------------------------
 
