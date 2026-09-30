@@ -45,6 +45,18 @@ if(AXOM_PYTHON_STABLE_ABI AND NOT Python_Development.SABIModule_FOUND)
             "or leave AXOM_PYTHON_STABLE_ABI off.")
 endif()
 
+# Under pip/uv the build backend runs from the current CMake directory rather than 
+# the user's shell, so a relative path might not be resolved the way the user meant it.
+# Reject it clearly rather than letting find_package fail with a generic message.
+foreach(_axom_py_dir_var AXOM_DIR axom_DIR)
+    if(DEFINED ${_axom_py_dir_var} AND NOT IS_ABSOLUTE "${${_axom_py_dir_var}}")
+        message(FATAL_ERROR
+                "${_axom_py_dir_var}='${${_axom_py_dir_var}}' must be an absolute path. "
+                "The build ran from the current CMake directory '${CMAKE_CURRENT_SOURCE_DIR}', "
+                "rather than the shell's working directory.")
+    endif()
+endforeach()
+
 # AXOM_DIR follows Axom's convention: the Axom install prefix, whose lib/cmake
 # contains axom-config.cmake. A directory that directly contains axom-config.cmake
 # is also accepted. CMake's own package variable (axom_DIR) takes precedence when set.
