@@ -99,7 +99,7 @@ it is not a portable PyPI-style wheel.
    ``conduit`` and ``llnl-conduit`` do not provide that same build.
 
    Use the Conduit Python package from the Conduit install recorded by Axom.
-   Wheels built by Axom's Python project record that path in ``conduit.pth``.
+   Wheels built by Axom's Python project record that path in ``axom-conduit.pth``.
 
 Quick start
 ^^^^^^^^^^^

@@ -13,7 +13,7 @@
 #   1. build the wheel from src/python against the prebuilt Axom install
 #      whose prefix is given by AXOM_DIR or AXOM_INSTALL (find_package(axom));
 #   2. install the wheel into a fresh uv venv;
-#   3. verify the wheel installed conduit.pth for the same-build Conduit python module;
+#   3. verify the wheel installed axom-conduit.pth for the same-build Conduit python module;
 #   4. run the Sidre Python test suite with plain pytest.
 #
 # Intended for the gcc docker image, which is nanobind-enabled.
@@ -131,7 +131,7 @@ uv pip install --python "${VENV_PY}" "${AXOM_WHEEL}[${AXOM_WHEEL_EXTRAS}]"
 
 echo "~~~~~~ VERIFY WHEEL-INSTALLED CONDUIT .pth ~~~~~~"
 PLATLIB=$("${VENV_PY}" -c 'import sysconfig; print(sysconfig.get_paths()["platlib"])')
-CONDUIT_PTH="${PLATLIB}/conduit.pth"
+CONDUIT_PTH="${PLATLIB}/axom-conduit.pth"
 if [[ ! -f "${CONDUIT_PTH}" ]]; then
     echo "ERROR: Expected wheel to install ${CONDUIT_PTH}."
     echo "       The wheel should expose the same-build Conduit python module without a manual PYTHONPATH update."

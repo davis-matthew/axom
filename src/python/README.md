@@ -207,7 +207,7 @@ Wheel metadata is static, but whether the underlying Axom is an MPI build is a b
 so the wheel cannot force MPI dependencies at install time.
 The `mpi` extra declares `mpi4py`, and the `test` extra declares `pytest`.
 Runtime dependencies intentionally stay minimal: `numpy` is required,
-while Conduit's Python module is exposed by the generated `conduit.pth` file.
+while Conduit's Python module is exposed by the generated `axom-conduit.pth` file.
 The GitHub wheel test lane builds against an explicitly passed prebuilt Axom
 install, passes the matching host-config through `cmake.args=-C`, and selects
 the `mpi` extra automatically when that host-config reports `ENABLE_MPI=ON`.

@@ -184,10 +184,11 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/axom-python-host-config.cmake"
               "${CMAKE_CURRENT_BINARY_DIR}/axom-python-env.sh"
         DESTINATION axom/share)
 
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/conduit.pth.in"
-               "${CMAKE_CURRENT_BINARY_DIR}/conduit.pth"
+# Prefixed with 'axom-' so it cannot collide with a conduit.pth shipped by any other distribution.
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/axom-conduit.pth.in"
+               "${CMAKE_CURRENT_BINARY_DIR}/axom-conduit.pth"
                @ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/conduit.pth"
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/axom-conduit.pth"
         DESTINATION ".")
 
 #------------------------------------------------------------------------------
