@@ -17,6 +17,11 @@
 #   4. run the Sidre Python test suite with plain pytest.
 #
 # Intended for the gcc docker image, which is nanobind-enabled.
+#
+# Required environment:
+#   HOST_CONFIG            host-config the Axom install was configured with; it supplies the
+#                          compilers, which the installed axom-config.cmake does not record
+#   AXOM_DIR/AXOM_INSTALL  Axom install prefix
 
 # Fail on the first error, including inside pipelines, and trace every command so
 # a CI failure is readable from the log alone.
@@ -24,7 +29,13 @@ set -e
 set -o pipefail
 set -x
 
-HOST_CONFIG="${HOST_CONFIG:-host-configs/docker/gcc@13.3.1.cmake}"
+# No default: a wrong host-config would silently build the binding with the wrong compiler
+if [[ -z "${HOST_CONFIG:-}" ]]; then
+    echo "ERROR: HOST_CONFIG is not set." >&2
+    echo "       Set it to the host-config used to configure the Axom install," >&2
+    echo "       e.g. HOST_CONFIG=host-configs/docker/gcc@13.3.1.cmake" >&2
+    exit 1
+fi
 
 echo "~~~~ helpful info ~~~~"
 echo "USER=$(id -u -n)"
@@ -52,10 +63,11 @@ fi
 HOST_CONFIG_PATH=$(absolute_path "${HOST_CONFIG}")
 echo "HOST_CONFIG_PATH=${HOST_CONFIG_PATH}"
 
-# extract value from host-config line of the form `set(${name} ON CACHE BOOL "")`
-# then capitalizes it and looks for true-like patterns
+# extract the value from the first CMake line of the form `set(${name} ON ...)` or
+# `set(${name} "ON")` in a file, then capitalizes it and looks for true-like patterns
 cmake_bool_from_file_is_on() {
-    local name="$1"
+    local file="$1"
+    local name="$2"
     local value
     value=$(awk -v name="${name}" '
         $0 ~ "set\\(" name "[ \t\"]+" {
@@ -65,7 +77,7 @@ cmake_bool_from_file_is_on() {
             print line
             exit
         }
-    ' "${HOST_CONFIG_PATH}")
+    ' "${file}")
     value="${value^^}"
     [[ "${value}" == "ON" || "${value}" == "TRUE" || "${value}" == "YES" || "${value}" == "1" ]]
 }
@@ -81,8 +93,9 @@ fi
 AXOM_DIR=$(absolute_path "${AXOM_DIR}")
 echo "AXOM_DIR=${AXOM_DIR}"
 
+# Determine whether MPI is enabled/disabled from host-config
 AXOM_WHEEL_ENABLE_MPI=OFF
-if cmake_bool_from_file_is_on ENABLE_MPI; then
+if cmake_bool_from_file_is_on "${AXOM_DIR}/lib/cmake/axom-config.cmake" AXOM_USE_MPI; then
     AXOM_WHEEL_ENABLE_MPI=ON
 fi
 echo "AXOM_WHEEL_ENABLE_MPI=${AXOM_WHEEL_ENABLE_MPI}"
