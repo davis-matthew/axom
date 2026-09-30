@@ -934,6 +934,145 @@ TEST(quest_marching_cubes, rejects_element_function_field)
 }
 
 //---------------------------------------------------------------------------
+// Single-domain input
+//---------------------------------------------------------------------------
+
+namespace
+{
+//! @brief Expect two host contours to be identical, entry by entry.
+void expectSameContour(const HostContour& a, const HostContour& b)
+{
+  ASSERT_EQ(a.facetCount, b.facetCount);
+  ASSERT_EQ(a.nodeCount, b.nodeCount);
+  EXPECT_TRUE(std::equal(a.corners.begin(), a.corners.end(), b.corners.begin()));
+  EXPECT_TRUE(std::equal(a.coords.begin(), a.coords.end(), b.coords.begin()));
+  EXPECT_TRUE(std::equal(a.parents.begin(), a.parents.end(), b.parents.begin()));
+  EXPECT_TRUE(std::equal(a.domains.begin(), a.domains.end(), b.domains.begin()));
+}
+
+//! @brief Contour @a mesh (already in @a policy's memory) and return the host result.
+HostContour contourOf(const conduit::Node& mesh, RuntimePolicy policy, double contourValue)
+{
+  axom::quest::MarchingCubes mc(policy, allocatorForPolicy(policy), DataParallelism::byPolicy);
+  mc.setMesh(mesh, "mesh");
+  mc.setFunctionField("fcn");
+  mc.computeIsocontour(contourValue);
+  return hostContour(mc);
+}
+}  // end anonymous namespace
+
+/*!
+ * @brief A single domain passed directly gives the same contour as the same
+ *        domain wrapped in a one-domain multi-domain mesh.
+ */
+template <int DIM>
+void testSingleDomainInput(bool setDomainId)
+{
+  constexpr int n = 8;
+  const mctest::PlanarField f(mctest::PlanarField::PointType {0.4, 0.55, 0.45},
+                              Vec3 {1., 2., DIM == 3 ? 3. : 0.});
+
+  conduit::Node hostDom, hostMd;
+  mctest::buildStructured<DIM>(hostDom, n, f, "fcn", mctest::SinusoidalWarp {0.03});
+  if(setDomainId)
+  {
+    hostDom["state/domain_id"] = 7;
+  }
+  wrapAsMultiDomain(hostMd, hostDom);
+
+  for(auto policy : enabledPolicies())
+  {
+    SCOPED_TRACE(policyName(policy));
+    const int allocatorID = allocatorForPolicy(policy);
+    conduit::Node dom, md;
+    mctest::copyBlueprintToPolicy(dom, hostDom, policy, allocatorID);
+    mctest::copyBlueprintToPolicy(md, hostMd, policy, allocatorID);
+
+    const HostContour single = contourOf(dom, policy, 0.0);
+    const HostContour wrapped = contourOf(md, policy, 0.0);
+    ASSERT_GT(single.facetCount, 0);
+    expectSameContour(single, wrapped);
+    checkUnweldedConnectivity<DIM>(single);
+    checkNodesOnPlane<DIM>(single, f);
+    checkFacetsInParentCells<DIM>(single, domainsById(hostMd));
+    for(axom::IndexType i = 0; i < single.facetCount; ++i)
+    {
+      ASSERT_EQ(single.domains[i], setDomainId ? 7 : 0);
+    }
+  }
+}
+
+TEST(quest_marching_cubes, single_domain_input_2d) { testSingleDomainInput<2>(false); }
+TEST(quest_marching_cubes, single_domain_input_3d) { testSingleDomainInput<3>(false); }
+TEST(quest_marching_cubes, single_domain_input_with_domain_id_3d)
+{
+  testSingleDomainInput<3>(true);
+}
+
+//! @brief One MarchingCubes object can switch between single- and multi-domain inputs.
+TEST(quest_marching_cubes, switch_between_single_and_multi_domain)
+{
+  constexpr int DIM = 3;
+  constexpr int n = 6;
+  const mctest::PlanarField f(mctest::PlanarField::PointType {1.5, 0.5, 0.5}, Vec3 {1., -2.5, 0.5});
+
+  conduit::Node multi;
+  buildMultiDomain<DIM>(multi, 3, n, f, true);
+  const conduit::Node& single = multi.child(1);  // state/domain_id == 11
+
+  const HostContour multiRef = contourOf(multi, RuntimePolicy::seq, 0.0);
+  const HostContour singleRef = contourOf(single, RuntimePolicy::seq, 0.0);
+  ASSERT_GT(singleRef.facetCount, 0);
+  ASSERT_GT(multiRef.facetCount, singleRef.facetCount);
+
+  axom::quest::MarchingCubes mc(RuntimePolicy::seq,
+                                mctest::hostAllocatorID(),
+                                DataParallelism::byPolicy);
+  auto run = [&](const conduit::Node& mesh) {
+    mc.clearOutput();
+    mc.setMesh(mesh, "mesh");
+    mc.setFunctionField("fcn");
+    mc.computeIsocontour(0.0);
+    return hostContour(mc);
+  };
+
+  expectSameContour(run(single), singleRef);
+  expectSameContour(run(multi), multiRef);
+  expectSameContour(run(single), singleRef);
+  const HostContour again = run(single);
+  for(axom::IndexType i = 0; i < again.facetCount; ++i)
+  {
+    ASSERT_EQ(again.domains[i], 11);
+  }
+}
+
+//! @brief A multi-domain mesh with no local domains is valid and yields an empty contour.
+TEST(quest_marching_cubes, empty_multi_domain_mesh)
+{
+  conduit::Node empty;
+  axom::quest::MarchingCubes mc(RuntimePolicy::seq,
+                                mctest::hostAllocatorID(),
+                                DataParallelism::byPolicy);
+  mc.setMesh(empty, "mesh");
+  mc.setFunctionField("fcn");
+  mc.computeIsocontour(0.0);
+  EXPECT_EQ(mc.getContourCellCount(), 0);
+  EXPECT_EQ(mc.getContourNodeCount(), 0);
+}
+
+//! @brief A single domain that lacks the named topology is an error, not a multi-domain mesh.
+TEST(quest_marching_cubes, rejects_single_domain_without_topology)
+{
+  conduit::Node dom;
+  buildValidationDomain(dom);
+  axom::quest::MarchingCubes mc(RuntimePolicy::seq,
+                                mctest::hostAllocatorID(),
+                                DataParallelism::byPolicy);
+  axom::slic::ScopedAbortToThrow abortGuard;
+  EXPECT_THROW(mc.setMesh(dom, "no_such_topology"), axom::slic::SlicAbortException);
+}
+
+//---------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
   ::testing::InitGoogleTest(&argc, argv);

@@ -68,7 +68,7 @@ enum class MarchingCubesDataParallelism
  * Implementation is for 2D (marching squares) and 3D (marching cubes).
  *
  * The input mesh is a Conduit::Node following the Mesh Blueprint
- * convention.  The mesh must be in multi-domain format.
+ * convention.  It may be a single domain or a multi-domain mesh.
  *
  * Usage example:
  * @verbatim
@@ -126,7 +126,8 @@ public:
 
   /*!
    * @brief Set the input mesh.
-   * @param [in] bpMesh Blueprint multi-domain mesh containing scalar field.
+   * @param [in] bpMesh Blueprint single-domain or multi-domain mesh containing
+   *             the topology and fields to use.
    * @param [in] topologyName Name of Blueprint topology to use in \a bpMesh.
    * @param [in] maskField Cell-based std::int32_t mask field.  If provided,
    *             cells where this field evaluates to false are skipped.
@@ -317,6 +318,14 @@ private:
    * May be longer than m_domainCount (the real count).
   */
   axom::Array<std::shared_ptr<detail::marching_cubes::MarchingCubesSingleDomain>> m_singles;
+
+  /*!
+   * @brief Wrapper used when callers pass a single-domain Blueprint mesh.
+   *
+   * Single-domain workers cache references to this wrapper's child node,
+   * so the wrapper must remain alive while the workers use it.
+   */
+  conduit::Node m_singleDomainMesh;
   std::string m_topologyName;
   std::string m_fcnFieldName;
   std::string m_fcnPath;
