@@ -268,6 +268,7 @@ public:
     facetParentIds.clear();
     facetDomainIds.clear();
     m_facetCount = 0;
+    m_nodeCount = 0;
 
     facetNodeIds.swap(m_facetNodeIds);
     facetNodeCoords.swap(m_facetNodeCoords);
@@ -342,6 +343,9 @@ private:
 
   ///@{
   //!@name Generated contour mesh, shared with singles.
+
+  axom::IndexType m_nodeCount {0};
+
   /*!
    * @brief Corners (index into m_facetNodeCoords) of generated facets.
    * @see allocateOutputBuffers().
@@ -353,6 +357,9 @@ private:
    * @see allocateOutputBuffers().
   */
   axom::Array<double, 2> m_facetNodeCoords;
+
+  //! @brief First node index from each parent domain.
+  axom::Array<axom::IndexType> m_nodeIndexOffsets;
 
   /*!
    * @brief Flat index of parent cell of facets.
