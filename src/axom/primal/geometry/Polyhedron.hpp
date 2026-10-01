@@ -287,12 +287,14 @@ public:
    *
    * \return The index where the vertex was inserted into.
    */
-  AXOM_HOST_DEVICE int addVertex(const PointType& pt)
-  {
-#if !(defined(__gfx90a__) && HIP_VERSION_MAJOR < 7)
-    // Skip assert in gfx90a (MI250X) device code with hip@6.4.3 due to an apparent compiler bug
-    SLIC_ASSERT(m_num_vertices + 1 < MAX_VERTS);
+#if defined(__HIP_DEVICE_COMPILE__) && defined(__gfx90a__) && __clang_major__ == 19
+  // ROCm 6.4 miscompiles this function for gfx90a when it is inlined.
+  __attribute__((noinline))
 #endif
+  AXOM_HOST_DEVICE int
+  addVertex(const PointType& pt)
+  {
+    SLIC_ASSERT(m_num_vertices < MAX_VERTS);
 
     m_vertices[m_num_vertices] = pt;
     m_num_vertices++;
