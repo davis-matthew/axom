@@ -53,8 +53,6 @@ public:
   //! \brief Construct a single-domain worker for \a mc.
   MarchingCubesSingleDomain(MarchingCubes& mc);
 
-  ~MarchingCubesSingleDomain() = default;
-
   /*!
    * @brief Set the Blueprint domain.
    * \param [in] dom Blueprint single-domain mesh containing the scalar field.
