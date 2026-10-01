@@ -96,12 +96,17 @@ Set ``AXOM_INSTALL`` to the absolute Axom install prefix and pass it as
 .. code-block:: bash
 
    $ export AXOM_INSTALL=/absolute/path/to/axom/install
-   $ uv venv --python "$(command -v python3)"
+   $ export AXOM_PYTHON=$("$AXOM_INSTALL/bin/run_python_with_axom.sh" \
+       -c 'import sys; print(sys.executable)')
+   $ uv venv --python "$AXOM_PYTHON"
 
    $ uv pip install /path/to/axom/src/python \
        -C cmake.define.AXOM_DIR="$AXOM_INSTALL"
 
    $ uv run --no-project python -c "import axom.sidre, conduit, numpy; print(axom.__version__)"
+
+Use the interpreter from the Axom install. Conduit's Python package contains a
+CPython extension and must match the venv's Python minor version.
 
 .. note::
    These examples use ``--no-project`` to keep ``uv run`` from installing a

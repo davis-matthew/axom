@@ -80,8 +80,14 @@ Set `AXOM_INSTALL` to the absolute Axom install prefix and pass it as `AXOM_DIR`
 
 ```bash
 AXOM_INSTALL=/absolute/path/to/axom/install
-uv build --wheel -C cmake.define.AXOM_DIR="$AXOM_INSTALL" src/python
+AXOM_PYTHON=$("$AXOM_INSTALL/bin/run_python_with_axom.sh" \
+  -c 'import sys; print(sys.executable)')
+uv build --wheel --python "$AXOM_PYTHON" \
+  -C cmake.define.AXOM_DIR="$AXOM_INSTALL" src/python
 ```
+
+Use the interpreter from the Axom install. Conduit's Python package contains a
+CPython extension, so another Python minor version cannot load it.
 
 The build resolves `AXOM_DIR` to `$AXOM_DIR/lib/cmake`, and also accepts a directory
 that holds `axom-config.cmake` directly. CMake's own package variable, `axom_DIR`,
@@ -93,6 +99,7 @@ Add `Conduit_DIR` only if Axom's recorded Conduit package path no longer resolve
 
 ```bash
 uv build --wheel \
+  --python "$AXOM_PYTHON" \
   -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   -C cmake.define.Conduit_DIR="$CONDUIT_INSTALL/lib/cmake/conduit" \
   src/python
@@ -103,6 +110,7 @@ missing or stale:
 
 ```bash
 uv build --wheel \
+  --python "$AXOM_PYTHON" \
   -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \
   -C cmake.define.AXOM_PYTHON_CONDUIT_MODULE_DIR="$CONDUIT_INSTALL/python-modules" \
   src/python
@@ -117,6 +125,7 @@ used to build it:
 
 ```bash
 uv build --wheel \
+  --python "$AXOM_PYTHON" \
   -C cmake.args=-C \
   -C cmake.args=/absolute/path/to/host-config.cmake \
   -C cmake.define.AXOM_DIR="$AXOM_INSTALL" \

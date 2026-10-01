@@ -56,12 +56,11 @@ fi
 HOST_CONFIG_PATH=$(absolute_path "${HOST_CONFIG}")
 echo "HOST_CONFIG_PATH=${HOST_CONFIG_PATH}"
 
-# Read the first set() value for the variable and check for ON, TRUE, YES, or 1.
-cmake_bool_from_file_is_on() {
+# Read the first set() value for a variable from a generated CMake file.
+cmake_value_from_file() {
     local file="$1"
     local name="$2"
-    local value
-    value=$(awk -v name="${name}" '
+    awk -v name="${name}" '
         $0 ~ "set\\(" name "[ \t\"]+" {
             line = $0
             sub("^[ \t]*set\\(" name "[ \t\"]+", "", line)
@@ -69,7 +68,13 @@ cmake_bool_from_file_is_on() {
             print line
             exit
         }
-    ' "${file}")
+    ' "${file}"
+}
+
+# Check a generated CMake value for ON, TRUE, YES, or 1.
+cmake_bool_from_file_is_on() {
+    local value
+    value=$(cmake_value_from_file "$1" "$2")
     value="${value^^}"
     [[ "${value}" == "ON" || "${value}" == "TRUE" || "${value}" == "YES" || "${value}" == "1" ]]
 }
@@ -83,10 +88,22 @@ if [[ -z "${AXOM_DIR}" || ! -f "${AXOM_DIR%/}/lib/cmake/axom-config.cmake" ]]; t
 fi
 AXOM_DIR=$(absolute_path "${AXOM_DIR}")
 echo "AXOM_DIR=${AXOM_DIR}"
+AXOM_CONFIG="${AXOM_DIR}/lib/cmake/axom-config.cmake"
+
+# Conduit includes a CPython extension, so the wheel must use the same Python
+# minor version as the Axom/Conduit installation.
+AXOM_PYTHON_EXECUTABLE=$(cmake_value_from_file "${AXOM_CONFIG}" AXOM_PYTHON_EXECUTABLE)
+if [[ -z "${AXOM_PYTHON_EXECUTABLE}" || ! -x "${AXOM_PYTHON_EXECUTABLE}" ]]; then
+    echo "ERROR: ${AXOM_CONFIG} records an invalid AXOM_PYTHON_EXECUTABLE:" >&2
+    echo "       '${AXOM_PYTHON_EXECUTABLE}'" >&2
+    exit 1
+fi
+echo "AXOM_PYTHON_EXECUTABLE=${AXOM_PYTHON_EXECUTABLE}"
+"${AXOM_PYTHON_EXECUTABLE}" --version
 
 # Read MPI support from the installed Axom configuration.
 AXOM_WHEEL_ENABLE_MPI=OFF
-if cmake_bool_from_file_is_on "${AXOM_DIR}/lib/cmake/axom-config.cmake" AXOM_USE_MPI; then
+if cmake_bool_from_file_is_on "${AXOM_CONFIG}" AXOM_USE_MPI; then
     AXOM_WHEEL_ENABLE_MPI=ON
 fi
 echo "AXOM_WHEEL_ENABLE_MPI=${AXOM_WHEEL_ENABLE_MPI}"
@@ -106,6 +123,7 @@ echo "~~~~~~ BUILD THE THIN WHEEL FROM src/python ~~~~~~"
 # axom-config.cmake records the Conduit install to use.
 rm -rf dist
 uv build --wheel \
+    --python "${AXOM_PYTHON_EXECUTABLE}" \
     -C cmake.args=-C \
     -C "cmake.args=${HOST_CONFIG_PATH}" \
     -C "cmake.define.AXOM_DIR=${AXOM_DIR}" \
@@ -119,10 +137,10 @@ if [[ -z "${AXOM_WHEEL}" ]]; then
 fi
 
 echo "~~~~~~ FRESH VENV + INSTALL THE WHEEL ~~~~~~"
-# Use the runner's python3 for the test venv.
+# Use Axom's Python for the test venv so Conduit's compiled module has the same ABI.
 VENV_DIR=/tmp/axom-wheel-venv
 rm -rf "${VENV_DIR}"
-uv venv --python "$(command -v python3)" "${VENV_DIR}"
+uv venv --python "${AXOM_PYTHON_EXECUTABLE}" "${VENV_DIR}"
 VENV_PY="${VENV_DIR}/bin/python"
 AXOM_WHEEL_EXTRAS="test"
 if [[ "${AXOM_WHEEL_ENABLE_MPI}" == "ON" ]]; then
